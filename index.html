@@ -1107,6 +1107,9 @@
   const bossSpeed = (B) => Math.min(270, 150 + 5 * Math.min(B.L, 19) + Math.max(0, B.L - 19));
   const bossFireGap = (B) => Math.max(0.72, 1.55 - 0.04 * Math.min(B.L, 19) - 0.004 * Math.max(0, B.L - 19));
 
+  // Takip eden mermi kuralı: gerçek kilitlenen füze yok. En fazla 0,8 sn hafifçe yönelir,
+  // kuşun dikey hızı eşiği geçince (zıplama ya da hızlı dalış) takibi hemen bırakır.
+  const HOME_MAX = 0.8, HOME_BREAK_VY = 165;
   function shootBullet(B, x, y, vx, vy, extra) {
     ebullets.push(Object.assign({ x, y, vx, vy, r: 7, rot: Math.atan2(vy, vx), kind: B.def.bullet, t: 0 }, extra || {}));
   }
@@ -1147,10 +1150,10 @@
         break; }
       case 'pins': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.18, f: () => shootBullet(B, B.x - 30, B.y - 10, -sp * (0.5 + Math.random() * 0.25), -sp * (0.35 + Math.random() * 0.4), { kind: 'pin', grav: 300 }) }); break;
       case 'firering': shootBullet(B, ox, prm.y != null ? prm.y : Math.max(70, Math.min(gyB - 70, oy)), -sp * 0.5, 0, { kind: 'firering', ring: 32, r: 36 }); break;
-      case 'rocket': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp * 0.7, Math.sin(a) * sp * 0.7, { kind: 'rocket', home: 1.6, homeT: 1.1 }); break; }
+      case 'rocket': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp * 0.7, Math.sin(a) * sp * 0.7, { kind: 'rocket', home: 0.9, homeT: 0.8 }); break; }
       case 'saw': [-1, 1].forEach(sg => shootBullet(B, ox, oy, -sp * 0.5, sg * sp * 0.45, { kind: 'saw', r: 10, bounce: true })); break;
       case 'potion': [0.25, 0.55].forEach(v => shootBullet(B, ox, oy, -sp * 0.6, -sp * v, { kind: 'potion', grav: 260 })); break;
-      case 'wisp': shootBullet(B, ox, oy, -sp * 0.4, 0, { kind: 'wisp', home: 1.1, homeT: 3.5, life: 4.5, r: 8 }); break;
+      case 'wisp': shootBullet(B, ox, oy, -sp * 0.4, 0, { kind: 'wisp', home: 0.8, homeT: 0.8, life: 4.5, r: 8 }); break;
       case 'wind': B.wind = { dir: prm.dir || (Math.random() < 0.5 ? -1 : 1), t: 1.8 }; shootBullet(B, ox, oy, -sp, 0); break;
       case 'mirror': (prm.ys || [-55, 55].map(dy => Math.max(60, Math.min(gyB - 60, oy + dy)))).forEach((y0, i) => { shootBullet(B, ox, y0, -sp * 0.55, 0, { kind: 'mirror', r: 11, baseY: y0, amp: 22, freq: 3, ph: i * Math.PI }); }); break;
       case 'spiral': for (let k = 0; k < 7; k++) B.queue.push({ t: k * 0.09, f: () => { B.spin += 0.55; const a = Math.PI + Math.sin(B.spin) * 0.7; shootBullet(B, B.x - 40, B.y + 4, Math.cos(a) * sp * 0.8, Math.sin(a) * sp * 0.8); } }); break;
@@ -1793,9 +1796,10 @@
       const ddt = dt * k;
       e.t += ddt;
       if (e.grav) e.vy += e.grav * ddt;
-      if (e.home && e.t < e.homeT) {   // yavaş dönüşlü takip (keskin dönemez, kaçılabilir)
+      if (e.home && e.t < Math.min(e.homeT, HOME_MAX)) {   // hafif yönelme: en fazla 0,8 sn, keskin dönemez
         const tg = players.find(p => p.alive);
-        if (tg) { const spd = Math.hypot(e.vx, e.vy), cur = Math.atan2(e.vy, e.vx); let want = Math.atan2(tg.y - e.y, tg.x - e.x) - cur;
+        if (tg && Math.abs(tg.vy) > HOME_BREAK_VY) e.home = 0;   // kuş hızlı hareket etti: takibi bırakır, düz gider
+        else if (tg) { const spd = Math.hypot(e.vx, e.vy), cur = Math.atan2(e.vy, e.vx); let want = Math.atan2(tg.y - e.y, tg.x - e.x) - cur;
           while (want > Math.PI) want -= Math.PI * 2; while (want < -Math.PI) want += Math.PI * 2;
           const na = cur + Math.max(-e.home * ddt, Math.min(e.home * ddt, want)); e.vx = Math.cos(na) * spd; e.vy = Math.sin(na) * spd; }
       }
