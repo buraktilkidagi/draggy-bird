@@ -1186,8 +1186,8 @@
     const u = 0.5 + 0.5 * Math.sin(B.mt * 0.37 + 1.3) * Math.cos(B.mt * 0.11 + B.L);
     return lo + (hi - lo) * u;
   }
-  // mermi hızının yatay çarpanı: boss uzaklaştıkça mermi hızlanır (kuşa ulaşma süresi eskisinin ~1,7 katı)
-  const bossSPX = (B) => Math.max(1, Math.min(3, (bossMouth(B)[0] - BX) / 240));
+  // mermi hızının yatay çarpanı: boss uzaklaştıkça mermi hızlanır
+  const bossSPX = (B) => Math.max(1, Math.min(4.5, (bossMouth(B)[0] - BX) / 165));   // kuşa varış ~0,8-1 sn (eski dikey ekrana yakın)
   // mermi çıkış noktası: gaga ucu
   function bossMouth(B) { const A = bossArt(B); return A ? [B.x + (A[1] - A[6]) * ART_K, B.y + (A[2] - A[7]) * ART_K] : [B.x - 40, B.y + 4]; }
   // "!" işaretinin yeri: kafanın üstü
@@ -1197,7 +1197,7 @@
     const encore = Math.floor(L / BOSSES.length);
     // daha yavaş güçlenme: 22 can ile başlar, her boss +6 (12. boss ~88)
     // 20 boss boyunca +6, sonra (★ tekrarları) her boss +3
-    const hp = Math.round(22 + Math.min(L, 19) * 6 + Math.max(0, L - 19) * 3);
+    const hp = Math.round((22 + Math.min(L, 19) * 6 + Math.max(0, L - 19) * 3) * BOSS_TUNE[Math.min(L, 19)][4]);
     return {
       L, def, name: def.name + (encore ? ' ' + '★'.repeat(encore) : ''),
       x: W + 90, y: (H - GROUND_H) / 2, hp, maxHp: hp, r: BOSS_R,
@@ -1229,8 +1229,21 @@
   }
 
   // Boss gücü 12 boss boyunca yavaşça artar
-  const bossSpeed = (B) => Math.min(270, 150 + 5 * Math.min(B.L, 19) + Math.max(0, B.L - 19));
-  const bossFireGap = (B) => Math.max(0.72, 1.55 - 0.04 * Math.min(B.L, 19) - 0.004 * Math.max(0, B.L - 19));
+  // ===== BOSS ZORLUK TABLOSU (ortalama botla ölçülerek ayarlandı) =====
+  // her boss için: [ateş aralığı (sn), mermi hızı çarpanı, desen yoğunluğu 0..1, normal aşama süresi (sn), can çarpanı]
+  // ★ tekrarlarında (L ≥ 20) ateş biraz sıklaşır, hız ve yoğunluk hafifçe artar.
+  const BOSS_TUNE = [
+    [0.38, 1.60, 0.53, 9.00, 1.70], [0.38, 1.60, 0.51, 8.70, 1.70], [0.39, 1.49, 0.46, 7.70, 1.68], [0.38, 1.60, 0.59, 8.60, 1.70],
+    [0.39, 1.59, 0.65, 8.90, 1.69], [0.38, 1.41, 0.56, 7.60, 1.60], [0.38, 1.53, 0.69, 8.20, 1.70], [0.48, 1.23, 0.54, 6.80, 1.37],
+    [0.49, 1.21, 0.59, 6.70, 1.36], [0.47, 1.23, 0.65, 7.10, 1.37], [0.62, 1.09, 0.61, 6.20, 1.21], [0.46, 1.23, 0.75, 7.00, 1.36],
+    [0.43, 1.23, 0.81, 7.30, 1.38], [0.65, 1.05, 0.73, 6.30, 1.17], [0.42, 1.24, 0.93, 7.40, 1.39], [0.59, 1.07, 0.85, 6.60, 1.19],
+    [0.60, 1.06, 0.89, 6.70, 1.18], [0.63, 1.02, 0.91, 6.50, 1.14], [0.64, 1.00, 0.95, 6.30, 1.12], [0.69, 0.97, 0.97, 6.40, 1.07],
+  ];
+  const bossTune = (B) => BOSS_TUNE[Math.min(B.L, 19)];
+  const bossEnc = (B) => Math.floor(B.L / BOSSES.length);
+  const bossVol = (B) => Math.min(1.3, bossTune(B)[2] + 0.06 * bossEnc(B));   // desen yoğunluğu
+  const bossSpeed = (B) => Math.min(290, (150 + 5 * Math.min(B.L, 19) + Math.max(0, B.L - 19)) * bossTune(B)[1]);
+  const bossFireGap = (B) => Math.max(0.62, bossTune(B)[0] * Math.pow(0.97, bossEnc(B)));
 
   // Takip eden mermi kuralı: gerçek kilitlenen füze yok. En fazla 0,8 sn hafifçe yönelir,
   // kuşun dikey hızı eşiği geçince (zıplama ya da hızlı dalış) takibi hemen bırakır.
@@ -1241,26 +1254,54 @@
 
   // Özel saldırılar: bekleme süreli (6-9 sn), 1 sn önceden haber verilir; arada sadece normal atışlar
   const SPECIALS = ['beam', 'cross', 'bolt', 'curtain', 'meteors', 'bubble', 'rocket', 'saw', 'firering', 'mirror', 'spiral', 'wind'];
-  const bossAtks = (B) => (B.def.phase2 && B.p2) ? B.def.phase2 : B.def.attacks;
+  // Her boss'un kendine özgü normal atışları (kolaydan zora); özel saldırılar (ışın, perde, baloncuk…) tanımdaki listeden gelir
+  const NORMAL_SETS = {
+    kuzgun: ['straight', 'double', 'fan'], madam: ['double', 'fan', 'stream'], paparazza: ['fan', 'burst', 'straight'],
+    golge: ['aimed', 'burst', 'stream'], kristal: ['ring', 'split', 'aimed'], sarmasik: ['wave', 'arc', 'fan'],
+    disko: ['ring', 'zigzag', 'double'], medusa: ['aimed3', 'helix', 'wave'], siber: ['stream', 'burst', 'fan'],
+    vampir: ['aimed3', 'boomer', 'ring', 'wave'], firavun: ['drop', 'wave', 'burst'], elmas: ['aimed3', 'ring', 'split', 'fan'],
+    siren: ['wave', 'helix', 'aimed'], bonbon: ['lolly', 'fan', 'zigzag'], sirk: ['pins', 'boomer', 'aimed'],
+    mekanika: ['double', 'stream', 'zigzag'], mantar: ['potion', 'wisp', 'arc', 'fan'], kozmik: ['ring', 'aimed3', 'split'],
+    firtina: ['fan', 'aimed', 'zigzag'], ayna: ['aimed3', 'split', 'fan', 'helix'],
+  };
+  const NORMAL_SETS_P2 = { ayna: ['ring', 'wave', 'boomer', 'drop'] };
+  const bossAtks = (B) => {
+    const base = (B.def.phase2 && B.p2) ? B.def.phase2 : B.def.attacks;
+    const norm = (B.p2 && NORMAL_SETS_P2[B.def.id]) || NORMAL_SETS[B.def.id] || base.filter(a => !SPECIALS.includes(a));
+    return base.filter(a => SPECIALS.includes(a)).concat(norm);
+  };
   const specialGap = () => 6 + Math.random() * 3;
 
   function bossFire(B, special, prm) {
-    const sp0 = bossSpeed(B), sp = sp0 * bossSPX(B);   // sp: yatay hız (mesafeyle ölçekli), sp0: dikey bileşenler
+    const sp0 = bossSpeed(B), sp = sp0 * bossSPX(B), vol = bossVol(B);   // sp: yatay hız (mesafeyle ölçekli), sp0: dikey bileşenler
     const [ox, oy] = bossMouth(B);
     const target = players.find(p => p.alive);
-    const aimAt = () => target ? Math.atan2(target.y - oy, target.x - ox) : Math.PI;
+    // öngörülü nişan: kuşun dikey hızına göre biraz ileriyi hedefler (yoğunlukla artar; ekran dışına taşmaz)
+    const aimAt = () => { if (!target) return Math.PI; const T = Math.abs(target.x - ox) / Math.max(120, bossSpeed(B) * bossSPX(B)), lead = 0.25 + 0.5 * Math.min(1, bossVol(B));
+      const ty = Math.max(30, Math.min(gyB - 30, target.y + target.vy * T * lead)); return Math.atan2(ty - oy, target.x - ox); };
     const shots = bossAtks(B).filter(a => !SPECIALS.includes(a));
     const gyB = H - GROUND_H;
     const kind = special || shots[Math.floor(Math.random() * shots.length)] || 'straight';
     prm = prm || {};
     B.mouth = 1;   // ateş ederken ağzını açar
     switch (kind) {
-      case 'straight': shootBullet(B, ox, oy, -sp, 0); break;
-      case 'double': shootBullet(B, ox, oy - 14, -sp, 0); shootBullet(B, ox, oy + 14, -sp, 0); break;
+      case 'straight': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp, Math.sin(a) * sp); break; }   // nişanlı tek
+      case 'double': { const a = aimAt(); [-15, 15].forEach(d => shootBullet(B, ox, oy + d, Math.cos(a) * sp, Math.sin(a) * sp)); break; }   // nişanlı çift (paralel)
       case 'spread3': [-0.22, 0, 0.22].forEach(a => shootBullet(B, ox, oy, -Math.cos(a) * sp, Math.sin(a) * sp0 * 0.6)); break;
+      // --- yeni normal desenler (yoğunluk vol ile artar; her birinde kaçış boşluğu kalır) ---
+      case 'fan': { const n = vol >= 0.45 ? 5 : 3, a0 = aimAt() - Math.PI; for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * 0.2; shootBullet(B, ox, oy, -sp, (Math.sin(a) * 0.6 + Math.sin(a0) * 0.5) * sp0); } break; }
+      case 'stream': { const n = 4 + Math.round(vol * 2), a = aimAt(); for (let k = 0; k < n; k++) B.queue.push({ t: k * 0.09, f: () => shootBullet(B, ...bossMouth(B), Math.cos(a) * sp, Math.sin(a) * sp) }); break; }
+      case 'burst': { const a = aimAt(); [-0.07, 0, 0.07].forEach(d => shootBullet(B, ox, oy, Math.cos(a + d) * sp, Math.sin(a + d) * sp)); break; }
+      case 'split': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp * 0.6, Math.sin(a) * sp * 0.6, { r: 10, split: 0.85, splitN: vol >= 0.5 ? 5 : 3, splitV: sp0 * 0.85 }); break; }
+      case 'arc': { const n = 2 + (vol >= 0.5 ? 1 : 0); for (let k = 0; k < n; k++) shootBullet(B, ox, oy, -sp * (0.45 + 0.12 * k), -sp0 * (0.55 + 0.25 * Math.random()), { grav: 230 }); break; }
+      case 'zigzag': [-1, 1].forEach(sg => shootBullet(B, ox, oy + sg * 10, -sp * 0.75, 0, { zig: 0.32, zigV: sg * (110 + 60 * vol) })); break;
+      case 'helix': for (let k = 0; k < 2 + Math.round(vol); k++) B.queue.push({ t: k * 0.22, f: () => { const [mx, my] = bossMouth(B); [-1, 1].forEach(sg => shootBullet(B, mx, my, -sp * 0.8, 0, { baseY: my, amp: 42, freq: 6, ph: sg > 0 ? 0 : Math.PI })); } }); break;
+      case 'boomer': [-1, 1].forEach(sg => shootBullet(B, ox, oy + sg * 40, -sp * 1.05, sg * sp0 * 0.12, { ax: sp * 0.75, life: 3.4, r: 9 })); break;
+      case 'drop': { const n = 4 + Math.round(vol * 2), x0 = BX - 120, span = Math.min(B.x - 140, 760) - x0, gap = Math.floor(Math.random() * n);
+        for (let k = 0; k < n; k++) if (k !== gap) shootBullet(B, x0 + span * (k + 0.5) / n + (Math.random() - 0.5) * 20, -14, -sp0 * 0.05, sp0 * (0.6 + 0.15 * vol)); break; }
       case 'aimed': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp, Math.sin(a) * sp); break; }
       case 'aimed3': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.2, f: () => { const a = aimAt(); shootBullet(B, ...bossMouth(B), Math.cos(a) * sp, Math.sin(a) * sp); } }); break;
-      case 'ring': for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + B.t; shootBullet(B, B.x, B.y, Math.cos(a) * sp0 * 0.9, Math.sin(a) * sp0 * 0.9); } break;
+      case 'ring': { const n = 8 + Math.round(vol * 4); for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2 + B.t; shootBullet(B, B.x, B.y, Math.cos(a) * sp0 * 0.9, Math.sin(a) * sp0 * 0.9); } break; }
       case 'wave': [-1, 1].forEach(sg => shootBullet(B, ox, oy, -sp * 0.85, 0, { baseY: oy, amp: 32, freq: 5, ph: sg > 0 ? 0 : Math.PI })); break;
       case 'rain': for (let k = 0; k < 7; k++) { const x = BX - 140 + Math.random() * (B.x - 110 - BX + 140); shootBullet(B, x, -12, -sp0 * 0.08, sp0 * 0.55); } break;
       case 'bubble': {   // 5 şeritten 3'ü dolu: en az 2 boş kaçış şeridi
@@ -1346,7 +1387,7 @@
   function cycTimes(L, p2) {   // A ve C süreleri (sn); Ayna Kraliçe'nin 2. fazında döngü hızlanır
     const k = Math.min(L, 19), enc = Math.floor(L / BOSSES.length), f = Math.max(0.72, Math.pow(0.92, enc));
     const late = Math.max(0, k - 14);   // son bosslar uzun dövüşür: döngüleri de uzun
-    return { A: (2.8 + 0.4 * k + 0.5 * late) * f * (p2 ? 0.75 : 1), C: (2.4 + 0.2 * k + 0.2 * late) * (p2 ? 0.8 : 1) };
+    return { A: BOSS_TUNE[k][3] * f * (p2 ? 0.75 : 1), C: (2.4 + 0.2 * k + 0.2 * late) * (p2 ? 0.8 : 1) };
   }
   let uhz = [];   // ulti tehlikeleri: { t, end, own, kill?, draw?, upd?, hitR?/alive? }
   function addHz(U, h, delay = 0) { h.t = -delay; h.own = U; if (h.end == null) h.end = 99; uhz.push(h); return h; }
@@ -1617,8 +1658,10 @@
     const gy = H - GROUND_H;
     if (y + r >= gy) return true;
     for (const e of ebullets) {
-      const tt = e.t + dt, ex = e.x + e.vx * dt;
-      const ey = e.amp ? e.baseY + e.vy * dt + Math.sin(tt * e.freq + e.ph) * e.amp : e.y + e.vy * dt + (e.grav ? 0.5 * e.grav * dt * dt : 0);
+      const tt = e.t + dt, ex = e.x + e.vx * dt + (e.ax ? 0.5 * e.ax * dt * dt : 0);
+      let ey = e.amp ? e.baseY + e.vy * dt + Math.sin(tt * e.freq + e.ph) * e.amp : e.y + e.vy * dt + (e.grav ? 0.5 * e.grav * dt * dt : 0);
+      if (e.zig) { ey = e.y; let t0 = e.t, rem = dt; while (rem > 1e-4) { const seg = Math.min(rem, (Math.floor(t0 / e.zig) + 1) * e.zig - t0 + 1e-6); ey += (Math.floor(t0 / e.zig) % 2 ? -1 : 1) * e.zigV * seg; t0 += seg; rem -= seg; } }
+      if (e.split && tt >= e.split) continue;   // bölününce yerine parçalar gelir (onlar o an görülür)
       if (e.ring) { if (Math.abs(Math.hypot(x - ex, y - ey) - e.ring) < 4 + r) return true; continue; }
       const rr = e.r + r; if ((x - ex) ** 2 + (y - ey) ** 2 < rr * rr) return true;
     }
@@ -1701,6 +1744,13 @@
           const na = cur + Math.max(-e.home * ddt, Math.min(e.home * ddt, want)); e.vx = Math.cos(na) * spd; e.vy = Math.sin(na) * spd; }
       }
       if (e.bounce && ((e.y < 16 && e.vy < 0) || (e.y > H - GROUND_H - 14 && e.vy > 0))) e.vy = -e.vy;
+      if (e.ax) e.vx += e.ax * ddt;                                            // bumerang: yavaşlar, geri döner
+      if (e.zig) e.vy = (Math.floor(e.t / e.zig) % 2 ? -1 : 1) * e.zigV;      // zikzak
+      if (e.split && e.t >= e.split) {                                         // bölünen mermi: yelpaze gibi saçılır
+        e.dead = true; burst(e.x, e.y, ['#ffffff', boss ? boss.def.glow : '#ccc'], 5, 80);
+        for (let k = 0; k < e.splitN; k++) { const a = Math.PI + (k - (e.splitN - 1) / 2) * 0.42; ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * e.splitV, vy: Math.sin(a) * e.splitV, r: 7, rot: a, kind: e.kind, t: 0 }); }
+        continue;
+      }
       if (e.life && e.t > e.life) { e.dead = true; continue; }
       e.x += e.vx * ddt;
       if (e.amp) { e.baseY += e.vy * ddt; e.y = e.baseY + Math.sin(e.t * e.freq + e.ph) * e.amp; }
