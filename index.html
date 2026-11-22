@@ -348,11 +348,11 @@
       speed: 300, cd: 0.42, r: 10, homing: true, turn: 1.5, cone: 0.7, range: 220, maxAng: 0.6,
       stats: { hiz: 2, siklik: 3, guc: 4 } },
     { id: 'stars', name: 'Yıldız Yağmuru', icon: '⭐', trait: 'Yelpaze gibi 3 yıldız atar',
-      speed: 470, cd: 0.5, r: 7, spread: true, stats: { hiz: 4, siklik: 2, guc: 3 } },
+      speed: 470, cd: 0.5, r: 7, spread: true, dmg: 0.45, stats: { hiz: 4, siklik: 2, guc: 3 } },   // 3 mermi × 0,45: DPS tek mermili silahlarla eşit
     { id: 'disco', name: 'Disko Topu', icon: '🪩', trait: 'İri · borulardan ve düşmanlardan geçer',
       speed: 280, cd: 0.5, r: 24, pierce: true, ghost: true, stats: { hiz: 2, siklik: 2, guc: 5 } },
     { id: 'laser', name: 'Simli Lazer', icon: '✨', trait: 'Tek atışta 3 seri lazer · nişan ister',
-      speed: 760, cd: 0.42, r: 7, burst: 3, stats: { hiz: 5, siklik: 3, guc: 1 } },
+      speed: 760, cd: 0.42, r: 7, burst: 3, dmg: 0.33, stats: { hiz: 5, siklik: 3, guc: 1 } },   // 3 seri × 0,33: DPS tek mermili silahlarla eşit
   ];
   const WMAP = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
   WMAP.meteor = { id: 'meteor', speed: 300, r: 22, pierce: true, ghost: true };   // Volkan'ın ultisi
@@ -846,7 +846,9 @@
     if (w.spread) pattern = dbl ? [-0.3, -0.18, -0.06, 0.06, 0.18, 0.3].map(a => [a, 0]) : [[-0.2, 0], [0, 0], [0.2, 0]];
     else pattern = (dbl && !w.burst) ? [[0, -13], [0, 13]] : [[0, 0]];   // lazer serisi ikiye katlanmaz
     const bursts = w.burst || 1;   // Simli Lazer: tek atışta 3 seri
-    for (let k = 0; k < bursts; k++) pattern.forEach(([a, dy]) => { const m = make(a, dy, k * 0.07); if (dbl) m.dmg = 0.5; shots.push(m); });
+    // mermi hasarı: silahın mermi başı hasarı; Yasmin'de mermi sayısı ikiye katlanınca yarısı (lazerde katlanmadığı için tam)
+    const dmg = (w.dmg || 1) * (dbl && !w.burst ? 0.5 : 1);
+    for (let k = 0; k < bursts; k++) pattern.forEach(([a, dy]) => { const m = make(a, dy, k * 0.07); m.dmg = dmg; shots.push(m); });
     sfx[w.id]();
   }
 
@@ -1166,7 +1168,7 @@
     const dmg = s.dmg || (s.w === 'meteor' ? 8 : 1);
     boss.hp -= dmg;
     boss.hurt = 1;
-    if (shooter) shooter.ult = Math.min(100, shooter.ult + 1.5);
+    if (shooter) shooter.ult = Math.min(100, shooter.ult + 1.5 * Math.min(1, dmg));   // ulti dolumu hasarla orantılı (3'lü atış ultiyi 3 kat doldurmasın)
     // Volkan – Yakıcı Ateş: boss 3 sn yanar (meteor: 5 sn)
     if (shooter && qid(shooter) === 'volkan') boss.burn = Math.max(boss.burn || 0, s.w === 'meteor' ? 5 : 3);
     burst(s.x, s.y, [boss.def.glow, '#ffffff'], 5, 90);
