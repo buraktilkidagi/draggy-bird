@@ -516,7 +516,7 @@
   }
   // score = ortak ilerleme (zorluk için); her oyuncunun kendi puanı players[i].score
   // Hikaye modu durumu
-  let heartPending = false, lostHeartT = 0, lives = 5, boss = null, bossPhase = null, bossCount = 0, nextBossAt = 25, ebullets = [], banners = [], phaseT = 0, bossTint = 0;
+  let incomingT = 0, heartPending = false, lostHeartT = 0, lives = 5, boss = null, bossPhase = null, bossCount = 0, nextBossAt = 25, ebullets = [], banners = [], phaseT = 0, bossTint = 0;
   const BOSS_EVERY = 25, MAX_LIVES = 5, SAVE_EVERY = 50;
   // Hikaye kaydı: her 50 puanda bir otomatik kaydedilir, tarayıcı kapansa da kalır
   // Her hikaye kuşunun kendi kaydı var; kayıt her boss yenildikten sonra alınır
@@ -597,7 +597,41 @@
   function loadSprite(src) { const im = new Image(); im.onload = () => { im.ok = true; }; im.src = src; return im; }
   function sprReady(im) { return GFX.img && im && im.ok; }
   for (const q of QUEENS) GFX.bird[q.id] = { up: loadSprite(`img/bird/${q.id}_up.webp`), mid: loadSprite(`img/bird/${q.id}_mid.webp`), down: loadSprite(`img/bird/${q.id}_down.webp`) };
-  for (const b of BOSSES) GFX.boss[b.id] = loadSprite(`img/boss/${b.id}.webp`);
+  // Boss görselleri (assets/bosses, 512×512, sola bakan kuş queen'ler). 512 uzayında ölçüler:
+  // [dosya, gaga ucu x, y, kafa x, y, r, gövde x, y, r, sağ uç x]. Gövde merkezi = boss'un konumu; çarpışma gövde + kafa dairesi
+  // (kuyruk, kanat ve saç uçları sayılmaz). Mermiler gaga ucundan çıkar.
+  const BOSS_ART = {
+    kuzgun: ['boss_01_raven', 42, 200, 122, 205, 62, 215, 275, 125, 474],
+    madam: ['boss_02_madame_grey', 67, 237, 134, 198, 60, 192, 320, 112, 438],
+    paparazza: ['boss_03_paparazza_flash', 41, 219, 115, 179, 56, 214, 267, 120, 425],
+    golge: ['boss_04_shadow_queen', 41, 206, 115, 211, 62, 205, 270, 130, 474],
+    kristal: ['boss_05_crystal_ice', 90, 224, 141, 211, 78, 189, 251, 140, 473],
+    sarmasik: ['boss_06_venom_vine', 43, 210, 115, 211, 62, 192, 288, 112, 472],
+    disko: ['boss_07_disco_dictator', 42, 236, 109, 192, 58, 176, 272, 104, 472],
+    medusa: ['boss_08_crimson_medusa', 70, 198, 134, 179, 58, 216, 260, 127, 450],
+    siber: ['boss_09_neon_cyber', 41, 220, 115, 192, 56, 204, 268, 106, 434],
+    vampir: ['boss_10_vampire_countess', 45, 212, 128, 192, 62, 160, 272, 112, 473],
+    firavun: ['boss_11_golden_pharaoh', 42, 236, 154, 166, 50, 240, 288, 112, 474],
+    elmas: ['boss_12_black_diamond', 77, 201, 128, 166, 38, 291, 268, 112, 446],
+    siren: ['boss_13_ocean_siren', 41, 196, 128, 179, 58, 219, 244, 128, 474],
+    bonbon: ['boss_14_bonbon', 90, 212, 160, 179, 58, 192, 288, 112, 448],
+    sirk: ['boss_15_circus_queen', 41, 169, 134, 166, 51, 187, 252, 99, 474],
+    mekanika: ['boss_16_mechanika', 42, 192, 128, 192, 62, 208, 256, 128, 474],
+    mantar: ['boss_17_mushroom_witch', 124, 218, 160, 205, 54, 235, 254, 130, 447],
+    kozmik: ['boss_18_cosmic_empress', 41, 184, 102, 173, 51, 160, 272, 112, 440],
+    firtina: ['boss_19_storm_queen', 41, 190, 109, 166, 58, 176, 272, 115, 440],
+    ayna: ['boss_20_mirror_queen', 52, 200, 102, 154, 45, 192, 304, 112, 473],
+  };
+  const ART_D = 125;   // drawBoss ölçeği 1'de görselin kenarı; dövüşte BOSS_SC (1,2) ile 150 px → oyuncu kuşunun ~2 katı
+  for (const b of BOSSES) { const A = BOSS_ART[b.id]; if (A) GFX.boss[b.id] = loadSprite(`assets/bosses/${A[0]}.webp`); }
+  function bossArt(B) { const A = BOSS_ART[B.def.id]; return A && sprReady(GFX.boss[B.def.id]) ? A : null; }
+  // hasar parlaması için görselin düz renge boyanmış kopyası (ilk kullanımda bir kez hazırlanır)
+  function tinted(im, col) {
+    const key = 'tint' + col; if (im[key]) return im[key];
+    const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const x = c.getContext('2d'); x.drawImage(im, 0, 0); x.globalCompositeOperation = 'source-atop'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
+    return (im[key] = c);
+  }
   const TAUNTS = {
     kuzgun: ['Tüylerin bile sönük, şekerim.', 'Sahne senin için fazla büyük.'],
     madam: ['O peruk mu, kuş yuvası mı?', 'Zevksizliğin göz kamaştırıyor.'],
@@ -1111,7 +1145,20 @@
   // ================= HİKAYE MODU & BOSSLAR =================
   function banner(text, sub, color, dur = 2.6) { banners = [{ text, sub, color, t: 0, dur }]; }
 
-  const BOSS_SC = 1.2, BOSS_R = 41;   // bosslar %20 büyük; çarpışma yarıçapı da (34 → 41)
+  const BOSS_SC = 1.2, BOSS_R = 41;   // bosslar %20 büyük; çarpışma yarıçapı da (34 → 41) — çizim (klasik) modu
+  const ART_K = ART_D * BOSS_SC / 512;   // dövüşte görselin 512 uzayından ekrana çarpanı
+  // çarpışma daireleri: resimliyse gövde + kafa, klasik çizimde eski tek daire
+  function bossCircs(B) {
+    const A = bossArt(B);
+    if (!A) return [[B.x, B.y, B.r]];
+    return [[B.x, B.y, A[8] * ART_K], [B.x + (A[3] - A[6]) * ART_K, B.y + (A[4] - A[7]) * ART_K, A[5] * ART_K]];
+  }
+  // durduğu x: resimli bossun kuyruğu ekrandan taşmasın (salınım payı 8 px)
+  function bossHomeX(B) { const A = bossArt(B); return A ? Math.min(W - 84, W - 14 - (A[9] - A[6]) * ART_K) : W - 84; }
+  // mermi çıkış noktası: gaga ucu
+  function bossMouth(B) { const A = bossArt(B); return A ? [B.x + (A[1] - A[6]) * ART_K, B.y + (A[2] - A[7]) * ART_K] : [B.x - 40, B.y + 4]; }
+  // "!" işaretinin yeri: kafanın üstü
+  function bossHeadTop(B) { const A = bossArt(B); return A ? [B.x + (A[3] - A[6]) * ART_K, B.y + (A[4] - A[7] - A[5] * 1.45) * ART_K] : [B.x, B.y - 62]; }
   function makeBoss(L) {
     const def = BOSSES[L % BOSSES.length];
     const encore = Math.floor(L / BOSSES.length);
@@ -1166,7 +1213,7 @@
 
   function bossFire(B, special, prm) {
     const sp = bossSpeed(B);
-    const ox = B.x - 40, oy = B.y + 4;
+    const [ox, oy] = bossMouth(B);
     const target = players.find(p => p.alive);
     const aimAt = () => target ? Math.atan2(target.y - oy, target.x - ox) : Math.PI;
     const shots = bossAtks(B).filter(a => !SPECIALS.includes(a));
@@ -1179,7 +1226,7 @@
       case 'double': shootBullet(B, ox, oy - 14, -sp, 0); shootBullet(B, ox, oy + 14, -sp, 0); break;
       case 'spread3': [-0.22, 0, 0.22].forEach(a => shootBullet(B, ox, oy, -Math.cos(a) * sp, Math.sin(a) * sp)); break;
       case 'aimed': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp, Math.sin(a) * sp); break; }
-      case 'aimed3': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.2, f: () => { const a = aimAt(); shootBullet(B, B.x - 40, B.y + 4, Math.cos(a) * sp, Math.sin(a) * sp); } }); break;
+      case 'aimed3': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.2, f: () => { const a = aimAt(); shootBullet(B, ...bossMouth(B), Math.cos(a) * sp, Math.sin(a) * sp); } }); break;
       case 'ring': for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + B.t; shootBullet(B, B.x, B.y, Math.cos(a) * sp * 0.6, Math.sin(a) * sp * 0.6); } break;
       case 'wave': [-1, 1].forEach(sg => shootBullet(B, ox, oy, -sp * 0.85, 0, { baseY: oy, amp: 32, freq: 5, ph: sg > 0 ? 0 : Math.PI })); break;
       case 'rain': for (let k = 0; k < 4; k++) { const x = 30 + Math.random() * (B.x - 110); shootBullet(B, x, -12, -sp * 0.08, sp * 0.55); } break;
@@ -1193,7 +1240,7 @@
         const gc = prm.gc != null ? prm.gc : 100 + Math.random() * (gyB - 200), drop = kind === 'meteors' ? sp * 0.1 : 0;
         for (let y = 12; y < gyB - 8; y += 34) if (Math.abs(y - gc) > 65) shootBullet(B, ox + (kind === 'meteors' ? (y - gc) * 0.15 : 0), y - (drop ? 30 : 0), -sp * 0.55, drop, kind === 'meteors' ? { kind: 'meteor' } : null);
         break; }
-      case 'pins': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.18, f: () => shootBullet(B, B.x - 30, B.y - 10, -sp * (0.5 + Math.random() * 0.25), -sp * (0.35 + Math.random() * 0.4), { kind: 'pin', grav: 300 }) }); break;
+      case 'pins': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.18, f: () => shootBullet(B, ...bossMouth(B), -sp * (0.5 + Math.random() * 0.25), -sp * (0.35 + Math.random() * 0.4), { kind: 'pin', grav: 300 }) }); break;
       case 'firering': shootBullet(B, ox, prm.y != null ? prm.y : Math.max(70, Math.min(gyB - 70, oy)), -sp * 0.5, 0, { kind: 'firering', ring: 32, r: 36 }); break;
       case 'rocket': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp * 0.7, Math.sin(a) * sp * 0.7, { kind: 'rocket', home: 0.9, homeT: 0.8 }); break; }
       case 'saw': [-1, 1].forEach(sg => shootBullet(B, ox, oy, -sp * 0.5, sg * sp * 0.45, { kind: 'saw', r: 10, bounce: true })); break;
@@ -1201,7 +1248,7 @@
       case 'wisp': shootBullet(B, ox, oy, -sp * 0.4, 0, { kind: 'wisp', home: 0.8, homeT: 0.8, life: 4.5, r: 8 }); break;
       case 'wind': B.wind = { dir: prm.dir || (Math.random() < 0.5 ? -1 : 1), t: 1.8 }; shootBullet(B, ox, oy, -sp, 0); break;
       case 'mirror': (prm.ys || [-55, 55].map(dy => Math.max(60, Math.min(gyB - 60, oy + dy)))).forEach((y0, i) => { shootBullet(B, ox, y0, -sp * 0.55, 0, { kind: 'mirror', r: 11, baseY: y0, amp: 22, freq: 3, ph: i * Math.PI }); }); break;
-      case 'spiral': for (let k = 0; k < 7; k++) B.queue.push({ t: k * 0.09, f: () => { B.spin += 0.55; const a = Math.PI + Math.sin(B.spin) * 0.7; shootBullet(B, B.x - 40, B.y + 4, Math.cos(a) * sp * 0.8, Math.sin(a) * sp * 0.8); } }); break;
+      case 'spiral': for (let k = 0; k < 7; k++) B.queue.push({ t: k * 0.09, f: () => { B.spin += 0.55; const a = Math.PI + Math.sin(B.spin) * 0.7; shootBullet(B, ...bossMouth(B), Math.cos(a) * sp * 0.8, Math.sin(a) * sp * 0.8); } }); break;
     }
     sfx.bossShot();
   }
@@ -1546,7 +1593,7 @@
     for (const e of enemies) { const ex = e.free ? e.x - e.vx * dt : e.x - speed * dt; if ((x - ex) ** 2 + (y - e.y) ** 2 < (e.r + r + 2) ** 2) return true; }
     if (boss && boss.phase === 'fight') {
       const B = boss;
-      if ((x - B.x) ** 2 + (y - B.y) ** 2 < (B.r + r + 4) ** 2) return true;
+      for (const [cx, cy, cr] of bossCircs(B)) if ((x - cx) ** 2 + (y - cy) ** 2 < (cr + r + 4) ** 2) return true;
       if (B.beam) { const bt = B.beam.t + dt; if (bt > 0.98 && bt < 1.47) {
         if (B.beam.bolt) { if (Math.abs(x - B.beam.x) < 14 + r + 2 && (B.beam.top ? y < B.beam.split + 2 : y > B.beam.split - 2)) return true; }
         else for (const by of B.beam.ys) if (Math.abs(y - by) < 10 + r + 2 && x < B.x) return true; } }
@@ -1571,11 +1618,12 @@
     bossTint += ((boss ? 1 : 0) - bossTint) * Math.min(1, dt * 0.8);   // gökyüzü yavaşça kızarır
     lostHeartT = Math.max(0, lostHeartT - dt);
     for (const bn of banners) bn.t += dt;
+    if (bossPhase === 'incoming') incomingT += dt;
     banners = banners.filter(bn => bn.t < bn.dur);
 
     // 1) eşik geçildi: sütunlar kesilir, uyarı
     if (!bossPhase && p1.score >= nextBossAt) {
-      bossPhase = 'incoming';
+      bossPhase = 'incoming'; incomingT = 0;
       const def = BOSSES[bossCount % BOSSES.length];
       banner(T('incoming'), T('incoming_sub', def.name), '#ff5fb4', 3);
       sfx.warn();
@@ -1651,6 +1699,9 @@
     if (timeStopT > 0 && B.phase === 'fight') { B.hurt = Math.max(0, B.hurt - dt * 4); return; }   // zaman durdu
     B.t += dt;
     B.hurt = Math.max(0, B.hurt - dt * 4);
+    // hareket yönüne göre eğilme: yumuşatılmış dikey hız (yükselirken gaga yukarı, inerken aşağı)
+    if (dt > 0) { B.vyS = (B.vyS || 0) + ((B.y - (B.py ?? B.y)) / dt - (B.vyS || 0)) * Math.min(1, dt * 5); B.py = B.y; }
+    B.tilt = Math.max(-0.17, Math.min(0.17, -(B.vyS || 0) * 0.0008));
     B.wing = (Math.sin(time * (6 + B.L)) + 1) / 2;
     B.mouth = Math.max(0, B.mouth - dt * 3);
     B.blinkT -= dt;
@@ -1679,12 +1730,12 @@
       if (B.wind.t <= 0) B.wind = null;
     }
     if (B.phase === 'enter') {                      // yavaşça süzülerek girer
-      B.x += (W - 84 - B.x) * Math.min(1, dt * 1.1);
+      B.x += (bossHomeX(B) - B.x) * Math.min(1, dt * 1.1);
       B.y += (midY - B.y) * Math.min(1, dt * 1.5);
       if (B.t > 2.8) { B.phase = 'fight'; B.t = 0; }
     } else if (B.phase === 'fight') {
       const ramp = Math.min(1, B.t / 3);            // saldırılar da yavaşça hızlanır
-      B.x = W - 84 + Math.sin(B.t * 0.5) * 8;
+      B.x = bossHomeX(B) + Math.sin(B.t * 0.5) * 8;
       const amp = Math.min(150, 85 + 6 * B.L) * (0.4 + 0.6 * ramp);
       // ilk boss düzgün dalgalanır; sonrakiler yön değiştirir, ilerledikçe hareket tahmin edilemez olur
       const u = B.L === 0 ? 0 : 0.3 + 0.7 * clamp01((B.L - 1) / 14);
@@ -1710,8 +1761,7 @@
       // gövdesine çarpmak öldürür
       for (const b of players) {
         if (!b.alive) continue;
-        const dx = B.x - b.x, dy = B.y - b.y, rr = B.r + hazR(b) - 6;
-        if (dx * dx + dy * dy < rr * rr) killPlayer(b);
+        if (bossCircs(B).some(([cx, cy, cr]) => (cx - b.x) ** 2 + (cy - b.y) ** 2 < (cr + hazR(b) - 6) ** 2)) killPlayer(b);
       }
     } else if (B.phase === 'dying') {
       B.y += 50 * dt; B.x += 20 * dt;
@@ -1909,8 +1959,7 @@
           }
         }
         if (!s.dead && boss && boss.phase === 'fight' && !s.hit.includes(boss)) {
-          const dx = boss.x - s.x, dy = boss.y - s.y, rr = boss.r + s.r;
-          if (dx * dx + dy * dy < rr * rr) {
+          if (bossCircs(boss).some(([cx, cy, cr]) => (cx - s.x) ** 2 + (cy - s.y) ** 2 < (cr + s.r) ** 2)) {
             hurtBoss(s);
             if (w.pierce) s.hit.push(boss); else s.dead = true;
           }
@@ -3144,18 +3193,34 @@
     const enterA = B.phase === 'enter' ? 0.35 + 0.1 * Math.sin(time * 6) : (B.phase === 'fight' && B.t < 0.5 && !B.intro ? 0.45 + B.t * 1.1 : 1);
     const sway = Math.sin(time * 2.2) * 0.07;         // kuşlar gibi hafif salınım
     const hs = Math.sin(time * 3.1);                   // saç savrulması
+    const A = bossArt(B), ph = B.L || B.def.id.length;
     g.save();
     g.globalAlpha *= Math.min(1, enterA);
-    g.translate(B.x, B.y + Math.sin(time * 4) * 3);
-    g.rotate(sway + (B.phase === 'dying' ? B.t * 2 : 0));
+    if (A) {   // resimli: yavaş süzülme, harekete göre eğilme (+ çok hafif sallanma)
+      g.translate(B.x, B.y + Math.sin(time * 2.3 + ph) * 4);
+      g.rotate((B.tilt || 0) + Math.sin(time * 1.7 + ph) * 0.03 + (B.phase === 'dying' ? B.t * 2 : 0));
+    } else {
+      g.translate(B.x, B.y + Math.sin(time * 4) * 3);
+      g.rotate(sway + (B.phase === 'dying' ? B.t * 2 : 0));
+    }
     g.scale(sc, sc);
     g.lineJoin = 'round'; g.lineCap = 'round';
     const SP = GFX.boss[d.id];
-    if (sprReady(SP)) {   // resimli boss: hafif nefes alma + vurulunca parlama
-      const w = 116 * (1 + Math.sin(time * 3) * 0.015), h = w * SP.height / SP.width, y0 = -h / 2 - 4;
-      g.drawImage(SP, -w / 2, y0, w, h);
-      if (B.hurt > 0.05) { g.globalCompositeOperation = 'lighter'; g.globalAlpha *= Math.min(1, B.hurt) * 0.6; g.drawImage(SP, -w / 2, y0, w, h); g.globalCompositeOperation = 'source-over'; }
-      if (B.p2) { g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-14, -4); g.lineTo(-6, 6); g.lineTo(-16, 14); g.moveTo(18, -12); g.lineTo(10, -2); g.lineTo(20, 8); g.stroke(); }   // Ayna Kraliçe 2. faz: çatlak
+    if (A) {   // resimli boss: nefes alır gibi ölçek + vurulunca kırmızı/beyaz parlama
+      const br = Math.sin(time * 2.6 + ph), k = ART_D / 512, x0 = -A[6] * k, y0 = -A[7] * k;
+      g.scale(1 - br * 0.012, 1 + br * 0.024);
+      g.drawImage(SP, x0, y0, ART_D, ART_D);
+      if (B.hurt > 0.05) {
+        const h = Math.min(1, B.hurt), a0 = g.globalAlpha;
+        g.globalAlpha = a0 * h * 0.42; g.drawImage(tinted(SP, '#ff2440'), x0, y0, ART_D, ART_D);
+        if (h > 0.6) { g.globalAlpha = a0 * (h - 0.6) * 1.1; g.drawImage(tinted(SP, '#ffffff'), x0, y0, ART_D, ART_D); }
+        g.globalAlpha = a0;
+      }
+      if (B.p2) {   // Ayna Kraliçe 2. faz: sırtındaki ayna çatlar
+        const mx = (282 - A[6]) * k, my = (166 - A[7]) * k;
+        g.beginPath(); for (const [a, L] of [[-2.2, 13], [-0.9, 15], [0.3, 12], [1.4, 16], [2.6, 11]]) { g.moveTo(mx, my); g.lineTo(mx + Math.cos(a) * L * 0.55 + 2, my + Math.sin(a) * L * 0.55); g.lineTo(mx + Math.cos(a) * L, my + Math.sin(a) * L); }
+        g.strokeStyle = 'rgba(20,8,40,.85)'; g.lineWidth = 2.6; g.stroke(); g.strokeStyle = '#ffffff'; g.lineWidth = 1.1; g.stroke();
+      }
       g.restore(); return;
     }
     if (d.gen) { drawNewDiva(g, B, d, hs); g.restore(); return; }
@@ -3932,8 +3997,26 @@
 
   }
 
+  // Boss tanıtımı: uyarı süresince sağda kayarak gelen portre kartı (resimli modda)
+  function drawIncomingCard() {
+    const def = BOSSES[bossCount % BOSSES.length], SP = GFX.boss[def.id], A = BOSS_ART[def.id];
+    if (!A || !sprReady(SP)) return;
+    const t = incomingT, a = Math.max(0, Math.min(1, t / 0.35, (3.2 - t) / 0.5)); if (a <= 0) return;
+    const g = ctx, R = 50, e = Math.min(1, t / 0.45), x = W - 70 + (1 - e) * (1 - e) * 120, y = 190 + Math.sin(time * 2) * 3;
+    g.save(); g.globalAlpha = a;
+    const gg = g.createRadialGradient(x, y, 6, x, y, R); gg.addColorStop(0, hexA(def.glow, 0.5)); gg.addColorStop(1, 'rgba(10,4,20,.9)');
+    g.fillStyle = gg; circ(g, x, y, R); g.fill();
+    g.save(); circ(g, x, y, R - 2); g.clip();
+    const D = 170, k = D / 512; g.drawImage(SP, x - A[3] * k + 4, y - A[4] * k + 8, D, D);   // kafa ortada
+    g.restore();
+    g.lineWidth = 3; g.strokeStyle = def.glow; g.shadowColor = def.glow; g.shadowBlur = 16; circ(g, x, y, R); g.stroke();
+    g.shadowBlur = 0; g.lineWidth = 1.5; g.strokeStyle = '#12061c'; circ(g, x, y, R + 2); g.stroke();
+    g.restore();
+  }
+
   function drawBossStuff() {
     const g = ctx;
+    if (bossPhase === 'incoming') drawIncomingCard();
     if (boss && boss.wind) {   // rüzgâr çizgileri
       g.strokeStyle = 'rgba(230,236,248,.5)'; g.lineWidth = 1.5;
       for (let k = 0; k < 14; k++) { const x = (k * 53 + time * 90) % W, y = ((k * 97 + time * 260 * boss.wind.dir) % (H - GROUND_H) + H - GROUND_H) % (H - GROUND_H); g.beginPath(); g.moveTo(x, y); g.lineTo(x + 6, y + 22 * boss.wind.dir); g.stroke(); }
@@ -4096,15 +4179,15 @@
       shaded(124, boss.x, boss.y, (g2) => drawBoss(boss, BOSS_SC, g2), { hi: 0.22, lo: 0.32, blur: 14, outline: { rim: boss.def.glow } });
       boss.x = ox; boss.y = oy;
       if (charging && boss.phase === 'fight') {   // kafasının üstünde "!" işareti
-        const by = boss.y - 76 + Math.sin(time * 12) * 2;
+        const [hx, hy] = bossHeadTop(boss), by = hy - 14 + Math.sin(time * 12) * 2;
         g.fillStyle = '#ffe23b'; g.strokeStyle = '#12061c'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(boss.x, by - 11); g.lineTo(boss.x + 11, by + 8); g.lineTo(boss.x - 11, by + 8); g.closePath(); g.fill(); g.stroke();
-        g.fillStyle = '#12061c'; g.fillRect(boss.x - 1.5, by - 4, 3, 7); g.fillRect(boss.x - 1.5, by + 4.5, 3, 2.5);
+        g.beginPath(); g.moveTo(hx, by - 11); g.lineTo(hx + 11, by + 8); g.lineTo(hx - 11, by + 8); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = '#12061c'; g.fillRect(hx - 1.5, by - 4, 3, 7); g.fillRect(hx - 1.5, by + 4.5, 3, 2.5);
       }
       if (opening) {   // açık verme: kafasının üstünde küçük "!"
-        const by = boss.y - 74 + Math.sin(time * 9) * 2;
-        g.fillStyle = '#ffe23b'; g.strokeStyle = '#12061c'; g.lineWidth = 1.5; circ(g, boss.x, by, 7); g.fill(); g.stroke();
-        g.fillStyle = '#12061c'; g.fillRect(boss.x - 1, by - 4.5, 2, 5.5); g.fillRect(boss.x - 1, by + 2.2, 2, 2);
+        const [hx, hy] = bossHeadTop(boss), by = hy - 12 + Math.sin(time * 9) * 2;
+        g.fillStyle = '#ffe23b'; g.strokeStyle = '#12061c'; g.lineWidth = 1.5; circ(g, hx, by, 7); g.fill(); g.stroke();
+        g.fillStyle = '#12061c'; g.fillRect(hx - 1, by - 4.5, 2, 5.5); g.fillRect(hx - 1, by + 2.2, 2, 2);
       }
     }
   }
@@ -4115,7 +4198,7 @@
   // Özel saldırı ön uyarısı: saldırının nereye geleceğini gösterir
   function drawTele(B) {
     const g = ctx, tl = B.tele, gyB = H - GROUND_H, k = 0.45 + 0.55 * Math.abs(Math.sin(time * 14));
-    const ox = B.x - 40, oy = B.y + 4;
+    const [ox, oy] = bossMouth(B);
     const arrow = (x, y, s = 7) => { g.beginPath(); g.moveTo(x - s, y); g.lineTo(x + s * 0.6, y - s * 0.8); g.lineTo(x + s * 0.6, y + s * 0.8); g.closePath(); g.fill(); };
     g.save();
     g.globalAlpha = k; g.fillStyle = '#ff3b5c'; g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.setLineDash([6, 5]);
@@ -4259,7 +4342,7 @@
       B.x = x + (mock ? 0 : Math.sin(t * 2.6 + i) * 5); B.y = y - beat + (i === speaker ? -6 : 0);
       B.blinkT -= 1 / 60; if (B.blinkT <= 0) { B.blink = 0.15; B.blinkT = 2 + Math.random() * 2; } B.blink = Math.max(0, B.blink - 1 / 60);
       B.mouth = i === speaker ? (Math.sin(time * 18) + 1) / 2 : (mock ? 0.25 : 0);
-      shaded(64, B.x, B.y, (g2) => drawBoss(B, 0.55, g2), { hi: 0.22, lo: 0.3 });
+      shaded(64, B.x, B.y, (g2) => drawBoss(B, bossArt(B) ? 0.7 : 0.55, g2), { hi: 0.22, lo: 0.3 });
     });
     if (!mock) for (let k = 0; k < 6; k++) { const x = (k * 67 + t * 30) % W, y = 250 - ((t * 40 + k * 50) % 160); g.fillStyle = bc[k % 5]; g.globalAlpha = 0.8; g.font = "12px 'Press Start 2P', monospace"; g.fillText(k % 2 ? '♪' : '♫', x, y); g.globalAlpha = 1; }   // müzik notaları
     // ön plandaki kalabalık siluetleri
@@ -5048,6 +5131,7 @@
     get p() { return players; }, get boss() { return boss; }, get eb() { return ebullets; }, get pipes() { return pipes; },
     get enemies() { return enemies; }, get banners() { return banners; },
     flap: (i = 0) => flap(i), shoot: (i = 0) => shoot(i), ult: (i = 0) => useUlt(i),
+    art: () => boss ? { c: bossCircs(boss), m: bossMouth(boss), h: bossHeadTop(boss) } : null,
     danger: (x, y, r, dt) => (typeof predictDanger === 'function' ? predictDanger(x, y, r, dt) : 0),
     // hikayeyi L. boss'un hemen öncesinden başlat (q: hikaye kuşu indeksi)
     story(L = 0, q, pre) {
