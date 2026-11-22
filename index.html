@@ -21,6 +21,11 @@
   }
   body { display: flex; align-items: center; justify-content: center; font-family: 'Press Start 2P', monospace; color: #fff; }
   #wrap { position: relative; }
+  /* yatay ekran: arayüz katmanları tuval ölçeğiyle (--z) büyür, böylece her pencere boyutunda aynı oranda görünür */
+  .overlay, #panel, .hud-btn, #fire, #padToast { zoom: var(--z, 1); }
+  .mbtns { max-width: 460px; margin: 0 auto; }
+  #settings > * { max-width: 760px; margin-left: auto; margin-right: auto; }
+  #settings .back { max-width: 460px; display: block; }
   canvas#c {
     display: block;
     border-radius: 12px;
@@ -59,8 +64,8 @@
   .ver { position: absolute; bottom: 12px; right: 14px; font-size: 7px; color: #6a5a8a; }
   #settings { z-index: 13; }   /* duraklatma menüsünün üstünde açılsın */
   #settings h2 { font-size: 18px; color: #ff5fb4; text-shadow: 0 0 10px #ff5fb4, 2px 2px 0 #1a0b24; margin-bottom: 8px; }
-  #settings h3 { font-size: 9px; color: #ffe23b; margin: 16px 0 8px; text-align: left; }
-  .langs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #settings h3 { font-size: 9px; color: #ffe23b; margin: 16px auto 8px; text-align: left; }
+  .langs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
   .langs button, .tog { font-family: inherit; font-size: 9px; color: #fff; cursor: pointer; padding: 9px 4px; border-radius: 8px;
     background: rgba(255,255,255,.05); border: 2px solid #3b2a5c; }
   .langs button.on, .tog.on { border-color: #ff5fb4; background: rgba(255,95,180,.14); box-shadow: 0 0 10px rgba(255,95,180,.4); }
@@ -104,7 +109,8 @@
   }
   #panel .sub { text-align: center; font-size: 7px; color: #bba9d9; margin-bottom: 14px; line-height: 1.6; }
   #panel h3 { font-size: 10px; color: #ffe23b; margin: 10px 0 8px; text-shadow: 2px 2px 0 #1a0b24; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  #panel > *:not(.back) { max-width: 1040px; margin-left: auto; margin-right: auto; }
   .card {
     position: relative;
     background: rgba(255,255,255,.04);
@@ -122,7 +128,7 @@
   .card .tg { font-size: 6px; color: #bba9d9; margin-top: 4px; line-height: 1.5; }
   .card .pw { font-size: 7px; color: #ffe23b; margin-top: 7px; }
   .card .pwd { font-size: 6px; color: #fff; margin-top: 4px; line-height: 1.6; opacity: .85; }
-  .wlist { display: flex; flex-direction: column; gap: 7px; }
+  .wlist { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .wcard { display: grid; grid-template-columns: 104px 1fr; gap: 8px; text-align: left; align-items: center; }
   .wcard canvas { height: 52px; }
   .wcard .nm { margin-top: 0; font-size: 8px; }
@@ -131,7 +137,7 @@
   .stat .lb { width: 52px; }
   .stat i { display: inline-block; width: 9px; height: 6px; background: #3b2a5c; border-radius: 1px; }
   .stat i.on { background: #ff5fb4; box-shadow: 0 0 4px #ff5fb4; }
-  .modes, .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .modes, .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; max-width: 620px !important; }
   .modes { grid-template-columns: 1fr 1fr 1fr; }
   .modes button { font-size: 8px; padding: 10px 2px; }
   .modes button, .tabs button {
@@ -151,7 +157,7 @@
   #storyBox.show { display: block; }
   #lockNote { display: none; font-size: 7px; line-height: 1.7; color: #ffe23b; text-align: center; margin-bottom: 8px; }
   #lockNote.show { display: block; }
-  .sbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 620px; margin: 0 auto; }
   .sbtns button { font-family: inherit; font-size: 8px; color: #fff; cursor: pointer; line-height: 1.8;
     background: rgba(255,255,255,.05); border: 2px solid #3b2a5c; border-radius: 10px; padding: 9px 4px; }
   .sbtns button small { display: block; font-size: 6px; color: #bba9d9; }
@@ -167,7 +173,7 @@
   #padToast small { display: block; font-size: 6px; color: #9fe3ff; }
   #padToast.show { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
   #closePanel {
-    display: block; width: 100%; margin-top: 16px; padding: 12px;
+    display: block; width: 100%; max-width: 460px !important; margin: 16px auto 0; padding: 12px;
     font-family: inherit; font-size: 11px; color: #1a0b24;
     background: linear-gradient(90deg, #ff5fb4, #ffe23b);
     border: none; border-radius: 10px; cursor: pointer;
@@ -398,12 +404,13 @@
 
   // ================= BOYUTLANDIRMA =================
   function resize() {
-    const scale = Math.min(window.innerWidth / W, window.innerHeight / H) * 0.96;
+    const scale = Math.min(window.innerWidth / W, window.innerHeight / H) * 0.98;   // 16:9; farklı oranlı ekranlarda ince kenar boşluğu
     const dpr = DPR();
     canvas.style.width = (W * scale) + 'px';
     canvas.style.height = (H * scale) + 'px';
     wrap.style.width = (W * scale) + 'px';
     wrap.style.height = (H * scale) + 'px';
+    wrap.style.setProperty('--z', scale.toFixed(4));
     canvas.width = Math.round(W * scale * dpr);
     canvas.height = Math.round(H * scale * dpr);
     ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
@@ -3123,9 +3130,10 @@
         ];
         players.forEach((b, i) => {
           const q = QUEENS[b.sel.queen], y = H * 0.6 + 36 + i * 50;
-          miniQueen(b.sel.queen, 34, y + 8, 0.8);
-          text(rows[i][0] + ' ' + WEAPONS[b.sel.weapon].icon + ' ' + q.power.icon, 62, y, 10, q.body, 'left');
-          text(rows[i][1], 62, y + 18, 7, '#ffffff', 'left');
+          const rx = W / 2 - 190;
+          miniQueen(b.sel.queen, rx, y + 8, 0.8);
+          text(rows[i][0] + ' ' + WEAPONS[b.sel.weapon].icon + ' ' + q.power.icon, rx + 28, y, 10, q.body, 'left');
+          text(rows[i][1], rx + 28, y + 18, 7, '#ffffff', 'left');
         });
         text(T('rule_win', WIN_SCORE), W / 2, H * 0.6 + 140, 9, '#ffe23b');
         text(T('rule_push', KILL_BONUS), W / 2, H * 0.6 + 158, 7, '#ffffff');
@@ -3135,7 +3143,7 @@
       const a = Math.min(1, deadTimer * 3);
       ctx.globalAlpha = a;
       text(T('game_over'), W / 2, 150, 26, '#ff5fb4');
-      const bx = 40, by = 200, bw = W - 80, bh = 170;
+      const bw = 440, bx = W / 2 - bw / 2, by = 200, bh = 170;
       ctx.fillStyle = 'rgba(26,11,46,.92)';
       ctx.strokeStyle = '#ff5fb4'; ctx.lineWidth = 3;
       roundRect(bx, by, bw, bh, 12); ctx.fill(); ctx.stroke();
@@ -4291,7 +4299,8 @@
   // 5) kararlılıkla kanat çırpar: "Tacımı geri alacağım!" → başlamak için dokun
   const PARTY_END = 17.5, P_ENTER = 3.4, P_MOCK = 7.0, P_KICK = 12.2, P_OUT = 13.6, P_RISE = 15.3;
   let partyT = 99, partyOn = false, partyBeat = 0;
-  const PARTY_SPOTS = [[64, 300], [138, 288], [222, 288], [296, 300]];
+  const PARTY_SPOTS = [[W / 2 - 270, 300], [W / 2 - 90, 288], [W / 2 + 90, 288], [W / 2 + 270, 300]];
+  const P_DOOR = 210, P_STAND = 420;   // kapının ve kuşun durduğu yerin x'i
   function updateParty(dt) {
     if (!partyOn) { partyOn = true; partyT = storySave ? PARTY_END : 0; partyBeat = 0; }
     const prev = partyT; partyT = Math.min(PARTY_END + 60, partyT + dt);
@@ -4320,7 +4329,7 @@
     const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0c0318'); bg.addColorStop(0.6, '#24093e'); bg.addColorStop(1, '#12041e'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
     // ışık hüzmeleri (müzik durunca söner)
     const on = mock ? 0.25 : 1, bc = ['#ff3fd0', '#49c6ff', '#ffe23b', '#7dff6a', '#b07aff'];
-    for (let k = 0; k < 5; k++) { const a = Math.PI / 2 + Math.sin(t * 0.9 + k * 1.3) * 0.9; g.fillStyle = hexA(bc[k], 0.16 * on); g.beginPath(); g.moveTo(W / 2, 70); g.lineTo(W / 2 + Math.cos(a - 0.12) * 700, 70 + Math.sin(a - 0.12) * 700); g.lineTo(W / 2 + Math.cos(a + 0.12) * 700, 70 + Math.sin(a + 0.12) * 700); g.closePath(); g.fill(); }
+    for (let k = 0; k < 9; k++) { const a = Math.PI / 2 + Math.sin(t * 0.9 + k * 1.3) * 1.15; g.fillStyle = hexA(bc[k % 5], 0.14 * on); g.beginPath(); g.moveTo(W / 2, 70); g.lineTo(W / 2 + Math.cos(a - 0.12) * 1100, 70 + Math.sin(a - 0.12) * 1100); g.lineTo(W / 2 + Math.cos(a + 0.12) * 1100, 70 + Math.sin(a + 0.12) * 1100); g.closePath(); g.fill(); }
     // disko topu
     g.strokeStyle = '#8a94b8'; g.lineWidth = 2; g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, 52); g.stroke();
     g.save(); g.translate(W / 2, 70); circ(g, 0, 0, 19); g.fillStyle = '#c8d0e8'; g.fill(); g.clip();
@@ -4332,8 +4341,8 @@
     g.fillStyle = '#3a1050'; g.fillRect(0, 330, W, 22); g.fillStyle = '#1a0628'; g.fillRect(0, 352, W, gy - 352);
     for (let x = 8; x < W; x += 16) { g.fillStyle = mock ? '#5a4a6a' : bc[((x / 16 | 0) + Math.floor(t * 6)) % 5]; circ(g, x, 341, 3); g.fill(); }
     // kapı (sol)
-    g.fillStyle = '#0a0410'; g.fillRect(36, 372, 48, gy - 372); g.strokeStyle = '#ffd84a'; g.lineWidth = 3; g.strokeRect(36, 372, 48, gy - 372);
-    g.fillStyle = '#ff3fd0'; g.font = "6px 'Press Start 2P', monospace"; g.textAlign = 'center'; g.fillText('EXIT', 60, 366);
+    g.fillStyle = '#0a0410'; g.fillRect(P_DOOR - 30, 372, 60, gy - 372); g.strokeStyle = '#ffd84a'; g.lineWidth = 3; g.strokeRect(P_DOOR - 30, 372, 60, gy - 372);
+    g.fillStyle = '#ff3fd0'; g.font = "8px 'Press Start 2P', monospace"; g.textAlign = 'center'; g.fillText('EXIT', P_DOOR, 364);
     // zemin (dans pisti)
     for (let x = 0; x < W; x += 30) for (let y = gy; y < H; y += 20) { g.fillStyle = mock ? '#2a1a3a' : hexA(bc[((x / 30 | 0) + (y / 20 | 0) + Math.floor(t * 4)) % 5], 0.55); g.fillRect(x + 1, y + 1, 28, 18); }
     // sahnedeki ışıltılı divalar (ilk 4 kötü diva)
@@ -4343,12 +4352,12 @@
       B.x = x + (mock ? 0 : Math.sin(t * 2.6 + i) * 5); B.y = y - beat + (i === speaker ? -6 : 0);
       B.blinkT -= 1 / 60; if (B.blinkT <= 0) { B.blink = 0.15; B.blinkT = 2 + Math.random() * 2; } B.blink = Math.max(0, B.blink - 1 / 60);
       B.mouth = i === speaker ? (Math.sin(time * 18) + 1) / 2 : (mock ? 0.25 : 0);
-      shaded(64, B.x, B.y, (g2) => drawBoss(B, bossArt(B) ? 0.7 : 0.55, g2), { hi: 0.22, lo: 0.3 });
+      shaded(80, B.x, B.y, (g2) => drawBoss(B, bossArt(B) ? 0.9 : 0.7, g2), { hi: 0.22, lo: 0.3 });
     });
-    if (!mock) for (let k = 0; k < 6; k++) { const x = (k * 67 + t * 30) % W, y = 250 - ((t * 40 + k * 50) % 160); g.fillStyle = bc[k % 5]; g.globalAlpha = 0.8; g.font = "12px 'Press Start 2P', monospace"; g.fillText(k % 2 ? '♪' : '♫', x, y); g.globalAlpha = 1; }   // müzik notaları
+    if (!mock) for (let k = 0; k < 16; k++) { const x = (k * 71 + t * 30) % W, y = 250 - ((t * 40 + k * 50) % 160); g.fillStyle = bc[k % 5]; g.globalAlpha = 0.8; g.font = "12px 'Press Start 2P', monospace"; g.fillText(k % 2 ? '♪' : '♫', x, y); g.globalAlpha = 1; }   // müzik notaları
     // ön plandaki kalabalık siluetleri
     g.fillStyle = '#07020c';
-    for (let k = 0; k < 9; k++) { const x = k * 44 + 6, bob = mock ? 0 : Math.abs(Math.sin(t * 6.5 + k * 1.7)) * 6; circ(g, x, 586 - bob, 15); g.fill(); g.fillRect(x - 20, 598 - bob, 40, 60); }
+    for (let k = 0; k < W / 44 + 1; k++) { const x = k * 44 + 6, bob = mock ? 0 : Math.abs(Math.sin(t * 6.5 + k * 1.7)) * 6; circ(g, x, 586 - bob, 15); g.fill(); g.fillRect(x - 20, 598 - bob, 40, 60); }
     return speaker;
   }
   function drawStreet(t, a) {
@@ -4363,29 +4372,29 @@
     g.save(); g.shadowColor = '#ff3fd0'; g.shadowBlur = fl ? 18 : 0; g.fillStyle = fl ? '#ff5fd8' : '#5a2a50'; g.font = "16px 'Press Start 2P', monospace"; g.textAlign = 'center'; g.fillText('DRAGGY CLUB', W / 2, 220); g.restore();
     g.strokeStyle = fl ? '#49c6ff' : '#22405a'; g.lineWidth = 2; g.strokeRect(W / 2 - 112, 196, 224, 36);
     // ıslak kaldırım + birikintiler
-    g.fillStyle = '#121624'; g.fillRect(0, gy, W, H - gy); g.fillStyle = 'rgba(255,95,216,.18)'; ell(g, 120, gy + 30, 50, 6); g.fill(); g.fillStyle = 'rgba(73,198,255,.15)'; ell(g, 270, gy + 60, 60, 7); g.fill();
+    g.fillStyle = '#121624'; g.fillRect(0, gy, W, H - gy); g.fillStyle = 'rgba(255,95,216,.18)'; ell(g, 220, gy + 30, 60, 6); g.fill(); ell(g, 820, gy + 45, 70, 7); g.fill(); g.fillStyle = 'rgba(73,198,255,.15)'; ell(g, 470, gy + 60, 70, 7); g.fill(); ell(g, 1000, gy + 25, 50, 6); g.fill();
     // yağmur
     g.strokeStyle = 'rgba(180,200,230,.55)'; g.lineWidth = 1.2;
-    for (let k = 0; k < 70; k++) { const x = ((k * 53 + t * 40) % (W + 40)) - 20, y = ((k * 97 + t * 520) % (H + 40)) - 20; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 4, y + 14); g.stroke(); }
+    for (let k = 0; k < 200; k++) { const x = ((k * 53 + t * 40) % (W + 40)) - 20, y = ((k * 97 + t * 520) % (H + 40)) - 20; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 4, y + 14); g.stroke(); }
   }
   function drawPartyIntro() {
     const t = partyT, p1 = players[0], q = QUEENS[p1.sel.queen], w = WEAPONS[p1.sel.weapon];
     if (t < P_OUT) {
       const speaker = drawClub(t);
       // kuşumuz: kapıdan girer, pistte durur
-      let bx = 150, by = 430, rot = 0, sc = 1.2, wing = 0.2 + 0.2 * Math.sin(time * 6), tear = false;
+      let bx = P_STAND, by = 430, rot = 0, sc = 1.3, wing = 0.2 + 0.2 * Math.sin(time * 6), tear = false;
       if (t < P_ENTER) { bx = -30; }
-      else if (t < P_ENTER + 1.6) { const u = (t - P_ENTER) / 1.6; bx = 60 + 90 * u; by = 430 - Math.abs(Math.sin(u * Math.PI * 3)) * 18; wing = 0.5 + 0.5 * Math.sin(time * 20); }
-      else if (t >= P_MOCK) { tear = true; sc = 1.2 - 0.15 * clamp01((t - P_MOCK) / 2); }
+      else if (t < P_ENTER + 1.6) { const u = (t - P_ENTER) / 1.6; bx = P_DOOR + (P_STAND - P_DOOR) * u; by = 430 - Math.abs(Math.sin(u * Math.PI * 3)) * 18; wing = 0.5 + 0.5 * Math.sin(time * 20); }
+      else if (t >= P_MOCK) { tear = true; sc = 1.3 - 0.15 * clamp01((t - P_MOCK) / 2); }
       if (t >= P_KICK) {   // kapıdan fırlatılma
-        const u = clamp01((t - P_KICK) / 0.7); bx = 150 - 95 * u; by = 430 - Math.sin(u * Math.PI) * 70; rot = -u * 9; sc = 1.1 - 0.5 * u;
+        const u = clamp01((t - P_KICK) / 0.7); bx = P_STAND - (P_STAND - P_DOOR) * u; by = 430 - Math.sin(u * Math.PI) * 70; rot = -u * 9; sc = 1.1 - 0.5 * u;
       }
       if (t < P_KICK + 0.7) drawPartyBird(bx, by, sc, rot, wing, tear);
-      if (t >= P_ENTER + 1.8 && t < P_MOCK) bubble(T('party_want'), 170, 372, bx + 6, by - 18, 7, 170);
-      if (speaker >= 0) { const [sx, sy] = PARTY_SPOTS[speaker]; bubble(PARTY_LINES()[speaker], sx < W / 2 ? sx + 70 : sx - 70, 178, sx, sy - 36, 7, 200); }
-      if (t >= P_KICK - 0.2 && t < P_KICK + 0.9) { const B = introBosses[0]; bubble(T('party_out'), 120, 200, B.x, B.y - 36, 9, 120); }
+      if (t >= P_ENTER + 1.8 && t < P_MOCK) bubble(T('party_want'), bx + 40, 372, bx + 6, by - 22, 8, 240);
+      if (speaker >= 0) { const [sx, sy] = PARTY_SPOTS[speaker]; bubble(PARTY_LINES()[speaker], sx, 186, sx, sy - 46, 8, 300); }
+      if (t >= P_KICK - 0.2 && t < P_KICK + 0.9) { const B = introBosses[0]; bubble(T('party_out'), B.x, 200, B.x, B.y - 46, 10, 160); }
       if (t >= P_KICK + 0.7) { ctx.fillStyle = `rgba(0,0,0,${clamp01((t - P_KICK - 0.7) / 0.7)})`; ctx.fillRect(0, 0, W, H); }   // kapı kapanır, kararır
-      if (t < P_ENTER) { ctx.globalAlpha = Math.min(1, t / 0.4, (P_ENTER - t) / 0.4); text(T('party_night'), W / 2, 150, 9, '#ffe23b'); ctx.globalAlpha = 1; }
+      if (t < P_ENTER) { ctx.globalAlpha = Math.min(1, t / 0.4, (P_ENTER - t) / 0.4); text(T('party_night'), W / 2, 150, 12, '#ffe23b'); ctx.globalAlpha = 1; }
     } else {
       drawStreet(t);
       const rise = clamp01((t - P_RISE) / 1.2);
@@ -4441,13 +4450,14 @@
     if (mode === 3 && boss && boss.phase !== 'dying') {   // boss şeridi
       const B = boss;
       hstrip(y, 30, B.def.glow);
-      htext(B.name.toUpperCase(), 10, y + 8, 7, B.def.glow, 'left', 230);
-      hbar(10, y + 15, W - 20, 6, B.hp / B.maxHp, B.def.glow);
+      const bx = W / 2 - 330, bw = 660;   // boss çubuğu ortada
+      htext(B.name.toUpperCase(), bx, y + 8, 7, B.def.glow, 'left', 330);
+      hbar(bx, y + 15, bw, 6, B.hp / B.maxHp, B.def.glow);
       if (B.ultMax) {   // boss ulti çubuğu
         const open = B.cyc === 'C';
         const k = open ? B.openT / B.openMax : B.ultAct ? Math.max(0, 1 - B.ultAct.t / B.ultAct.dur) : B.ultPrep ? 1 : B.ultG / B.ultMax, hot = !open && (k >= 1 || B.ultAct);
-        hbar(10, y + 24, W - 20, 2, k, open ? '#ffe23b' : hot ? (Math.sin(time * 18) > 0 ? '#ffffff' : '#ff3b6b') : '#ff7ad9', 'rgba(255,255,255,.08)');
-        htext(open ? T('boss_open') : T('boss_ult'), W - 10, y + 8, 5, open ? '#ffe23b' : hot ? '#ffffff' : '#ff9ad5', 'right', 110);
+        hbar(bx, y + 24, bw, 2, k, open ? '#ffe23b' : hot ? (Math.sin(time * 18) > 0 ? '#ffffff' : '#ff3b6b') : '#ff7ad9', 'rgba(255,255,255,.08)');
+        htext(open ? T('boss_open') : T('boss_ult'), bx + bw, y + 8, 5, open ? '#ffe23b' : hot ? '#ffffff' : '#ff9ad5', 'right', 110);
       }
       y += 30;
     }
@@ -4461,7 +4471,7 @@
     for (const bn of banners) {
       const a = Math.max(0, Math.min(1, bn.t / 0.3, (bn.dur - bn.t) / 0.4));
       lines.push({ txt: bn.text, c: bn.color, s: 8, a });
-      if (bn.sub) wrap2(bn.sub, 6, W - 24).forEach(l => lines.push({ txt: l, c: '#ffffff', s: 6, a }));
+      if (bn.sub) wrap2(bn.sub, 6, 760).forEach(l => lines.push({ txt: l, c: '#ffffff', s: 6, a }));
     }
     for (const n of notes) {
       const a = Math.max(0, Math.min(1, n.t / 0.2, (n.dur - n.t) / 0.4));
@@ -4470,7 +4480,7 @@
     if (timeStopT > 0) lines.push({ txt: '⏳ ' + timeStopT.toFixed(1), c: '#c8ffe4', s: 7, a: 1 });
     if (mode === 3 && boss && boss.taunt && !banners.length) {
       const a = Math.max(0, Math.min(1, boss.taunt.t / 0.2, (2.6 - boss.taunt.t) / 0.3));
-      wrap2('"' + boss.taunt.txt + '"', 6, W - 24).forEach(l => lines.push({ txt: l, c: '#ffffff', s: 6, a }));
+      wrap2('"' + boss.taunt.txt + '"', 6, 760).forEach(l => lines.push({ txt: l, c: '#ffffff', s: 6, a }));
     }
     if (!lines.length) return;
     const lh = (s) => s + 5, h = lines.reduce((sum, l) => sum + lh(l.s), 0) + 6;
@@ -4561,7 +4571,7 @@
     if (themed) safe(ctx, 'tema', drawStoryBG);
     else { safe(ctx, 'gökyüzü', drawSky); safe(ctx, 'havai fişek', drawFireworks); safe(ctx, 'şehir', drawCity); }
     if (bossTint > 0.01) { ctx.fillStyle = `rgba(120,0,70,${0.2 * bossTint})`; ctx.fillRect(0, 0, W, H - GROUND_H); }
-    if (state !== 'ready') for (const p of pipes) safe(ctx, 'sütun', () => (p.theme && THEMES[p.theme]) ? drawThemedPipe(p) : drawPipe(p));
+    if (state === 'play' || state === 'dead') for (const p of pipes) safe(ctx, 'sütun', () => (p.theme && THEMES[p.theme]) ? drawThemedPipe(p) : drawPipe(p));
     for (const p of pipes) if (p.heart && !p.heart.taken) safe(ctx, 'can', () => {   // toplanabilir can
       const hx = p.x + PIPE_W / 2, hy = p.top + p.gap / 2 + Math.sin(time * 3) * 6, sz = 9 + Math.sin(time * 6) * 1.2;
       ctx.save(); ctx.shadowColor = '#ff3b6b'; ctx.shadowBlur = 16;
