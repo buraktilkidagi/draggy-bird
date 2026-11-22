@@ -1066,6 +1066,7 @@
   // ================= HİKAYE MODU & BOSSLAR =================
   function banner(text, sub, color, dur = 2.6) { banners = [{ text, sub, color, t: 0, dur }]; }
 
+  const BOSS_SC = 1.2, BOSS_R = 41;   // bosslar %20 büyük; çarpışma yarıçapı da (34 → 41)
   function makeBoss(L) {
     const def = BOSSES[L % BOSSES.length];
     const encore = Math.floor(L / BOSSES.length);
@@ -1074,7 +1075,7 @@
     const hp = Math.round(22 + Math.min(L, 19) * 6 + Math.max(0, L - 19) * 3);
     return {
       L, def, name: def.name + (encore ? ' ' + '★'.repeat(encore) : ''),
-      x: W + 90, y: (H - GROUND_H) / 2, hp, maxHp: hp, r: 34,
+      x: W + 90, y: (H - GROUND_H) / 2, hp, maxHp: hp, r: BOSS_R,
       t: 0, phase: 'enter', fireT: 1.2, specT: 3.2, hurt: 0, beam: null, tele: null, wing: 0, queue: [], spin: 0,
       mouth: 0, blink: 0, blinkT: 2, taunt: null, tauntT: 2.5,
       ultG: 0, ultMax: bossUltFill(L, encore), ultPrep: 0, ultAct: null, ultN: 0,
@@ -1117,7 +1118,7 @@
 
   function bossFire(B, special, prm) {
     const sp = bossSpeed(B);
-    const ox = B.x - 34, oy = B.y + 4;
+    const ox = B.x - 40, oy = B.y + 4;
     const target = players.find(p => p.alive);
     const aimAt = () => target ? Math.atan2(target.y - oy, target.x - ox) : Math.PI;
     const shots = bossAtks(B).filter(a => !SPECIALS.includes(a));
@@ -1130,7 +1131,7 @@
       case 'double': shootBullet(B, ox, oy - 14, -sp, 0); shootBullet(B, ox, oy + 14, -sp, 0); break;
       case 'spread3': [-0.22, 0, 0.22].forEach(a => shootBullet(B, ox, oy, -Math.cos(a) * sp, Math.sin(a) * sp)); break;
       case 'aimed': { const a = aimAt(); shootBullet(B, ox, oy, Math.cos(a) * sp, Math.sin(a) * sp); break; }
-      case 'aimed3': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.2, f: () => { const a = aimAt(); shootBullet(B, B.x - 34, B.y + 4, Math.cos(a) * sp, Math.sin(a) * sp); } }); break;
+      case 'aimed3': for (let k = 0; k < 3; k++) B.queue.push({ t: k * 0.2, f: () => { const a = aimAt(); shootBullet(B, B.x - 40, B.y + 4, Math.cos(a) * sp, Math.sin(a) * sp); } }); break;
       case 'ring': for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + B.t; shootBullet(B, B.x, B.y, Math.cos(a) * sp * 0.6, Math.sin(a) * sp * 0.6); } break;
       case 'wave': [-1, 1].forEach(sg => shootBullet(B, ox, oy, -sp * 0.85, 0, { baseY: oy, amp: 32, freq: 5, ph: sg > 0 ? 0 : Math.PI })); break;
       case 'rain': for (let k = 0; k < 4; k++) { const x = 30 + Math.random() * (B.x - 110); shootBullet(B, x, -12, -sp * 0.08, sp * 0.55); } break;
@@ -1152,7 +1153,7 @@
       case 'wisp': shootBullet(B, ox, oy, -sp * 0.4, 0, { kind: 'wisp', home: 1.1, homeT: 3.5, life: 4.5, r: 8 }); break;
       case 'wind': B.wind = { dir: prm.dir || (Math.random() < 0.5 ? -1 : 1), t: 1.8 }; shootBullet(B, ox, oy, -sp, 0); break;
       case 'mirror': (prm.ys || [-55, 55].map(dy => Math.max(60, Math.min(gyB - 60, oy + dy)))).forEach((y0, i) => { shootBullet(B, ox, y0, -sp * 0.55, 0, { kind: 'mirror', r: 11, baseY: y0, amp: 22, freq: 3, ph: i * Math.PI }); }); break;
-      case 'spiral': for (let k = 0; k < 7; k++) B.queue.push({ t: k * 0.09, f: () => { B.spin += 0.55; const a = Math.PI + Math.sin(B.spin) * 0.7; shootBullet(B, B.x - 34, B.y + 4, Math.cos(a) * sp * 0.8, Math.sin(a) * sp * 0.8); } }); break;
+      case 'spiral': for (let k = 0; k < 7; k++) B.queue.push({ t: k * 0.09, f: () => { B.spin += 0.55; const a = Math.PI + Math.sin(B.spin) * 0.7; shootBullet(B, B.x - 40, B.y + 4, Math.cos(a) * sp * 0.8, Math.sin(a) * sp * 0.8); } }); break;
     }
     sfx.bossShot();
   }
@@ -1858,12 +1859,12 @@
       if (B.wind.t <= 0) B.wind = null;
     }
     if (B.phase === 'enter') {                      // yavaşça süzülerek girer
-      B.x += (W - 75 - B.x) * Math.min(1, dt * 1.1);
+      B.x += (W - 84 - B.x) * Math.min(1, dt * 1.1);
       B.y += (midY - B.y) * Math.min(1, dt * 1.5);
       if (B.t > 2.8) { B.phase = 'fight'; B.t = 0; }
     } else if (B.phase === 'fight') {
       const ramp = Math.min(1, B.t / 3);            // saldırılar da yavaşça hızlanır
-      B.x = W - 75 + Math.sin(B.t * 0.5) * 10;
+      B.x = W - 84 + Math.sin(B.t * 0.5) * 8;
       const amp = Math.min(150, 85 + 6 * B.L) * (0.4 + 0.6 * ramp);
       // ilk boss düzgün dalgalanır; sonrakiler yön değiştirir, ilerledikçe hareket tahmin edilemez olur
       const u = B.L === 0 ? 0 : 0.3 + 0.7 * clamp01((B.L - 1) / 14);
@@ -2475,6 +2476,27 @@
     sh.addColorStop(0, 'rgba(20,0,40,0)'); sh.addColorStop(1, `rgba(20,0,40,${o.lo ?? 0.38})`);
     g.fillStyle = sh; g.fillRect(0, 0, S, S);
     g.globalCompositeOperation = 'source-over';
+    if (o.outline) {   // belirginlik: kalın koyu dış çizgi + karakterin renginde kenar parlaması (rim light)
+      let s = _offs['sil' + S]; if (!s) { s = _offs['sil' + S] = document.createElement('canvas'); s.width = s.height = S; }
+      const sg = s.getContext('2d');
+      const sil = (col) => { sg.globalCompositeOperation = 'source-over'; sg.clearRect(0, 0, S, S); sg.drawImage(c, 0, 0); sg.globalCompositeOperation = 'source-in'; sg.fillStyle = col; sg.fillRect(0, 0, S, S); sg.globalCompositeOperation = 'source-over'; };
+      const ow = (o.outline.w || 3.2), sc2 = R * 2 / S;
+      ctx.save();
+      if (o.alpha != null) ctx.globalAlpha *= o.alpha;
+      sil(o.outline.rim);   // dış parlama
+      ctx.shadowColor = o.outline.rim; ctx.shadowBlur = 18;
+      ctx.globalAlpha *= 0.85;
+      ctx.drawImage(s, cx - R, cy - R, R * 2, R * 2);
+      ctx.shadowBlur = 0; ctx.globalAlpha /= 0.85;
+      for (let k = 0; k < 8; k++) {   // ince renkli halka (rim), en dışta
+        const a = k / 8 * Math.PI * 2; ctx.drawImage(s, cx - R + Math.cos(a) * (ow + 2), cy - R + Math.sin(a) * (ow + 2), R * 2, R * 2);
+      }
+      sil(o.outline.dark || '#07040c');
+      for (let k = 0; k < 12; k++) {   // kalın koyu dış çizgi
+        const a = k / 12 * Math.PI * 2; ctx.drawImage(s, cx - R + Math.cos(a) * ow, cy - R + Math.sin(a) * ow, R * 2, R * 2);
+      }
+      ctx.restore();
+    }
     ctx.save();
     if (o.alpha != null) ctx.globalAlpha *= o.alpha;
     ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = o.blur ?? 10; ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 6;
@@ -3987,10 +4009,15 @@
       }
       const ox = boss.x, oy = boss.y;
       if (boss.ultPrep) { boss.x += (Math.random() - 0.5) * 5; boss.y += (Math.random() - 0.5) * 5; }   // ulti öncesi titreme
-      shaded(100, boss.x, boss.y, (g2) => drawBoss(boss, 1, g2), { hi: 0.22, lo: 0.32, blur: 14 });
+      if (boss.phase !== 'dying') {   // arkasında koyu hale: arka plan boss'un etrafında hafif kararır
+        const hg = g.createRadialGradient(boss.x, boss.y - 8, 20, boss.x, boss.y - 8, 118);
+        hg.addColorStop(0, 'rgba(6,2,12,.42)'); hg.addColorStop(0.6, 'rgba(6,2,12,.22)'); hg.addColorStop(1, 'rgba(6,2,12,0)');
+        g.fillStyle = hg; circ(g, boss.x, boss.y - 8, 118); g.fill();
+      }
+      shaded(124, boss.x, boss.y, (g2) => drawBoss(boss, BOSS_SC, g2), { hi: 0.22, lo: 0.32, blur: 14, outline: { rim: boss.def.glow } });
       boss.x = ox; boss.y = oy;
       if (charging && boss.phase === 'fight') {   // kafasının üstünde "!" işareti
-        const by = boss.y - 62 + Math.sin(time * 12) * 2;
+        const by = boss.y - 76 + Math.sin(time * 12) * 2;
         g.fillStyle = '#ffe23b'; g.strokeStyle = '#12061c'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(boss.x, by - 11); g.lineTo(boss.x + 11, by + 8); g.lineTo(boss.x - 11, by + 8); g.closePath(); g.fill(); g.stroke();
         g.fillStyle = '#12061c'; g.fillRect(boss.x - 1.5, by - 4, 3, 7); g.fillRect(boss.x - 1.5, by + 4.5, 3, 2.5);
@@ -4004,7 +4031,7 @@
   // Özel saldırı ön uyarısı: saldırının nereye geleceğini gösterir
   function drawTele(B) {
     const g = ctx, tl = B.tele, gyB = H - GROUND_H, k = 0.45 + 0.55 * Math.abs(Math.sin(time * 14));
-    const ox = B.x - 34, oy = B.y + 4;
+    const ox = B.x - 40, oy = B.y + 4;
     const arrow = (x, y, s = 7) => { g.beginPath(); g.moveTo(x - s, y); g.lineTo(x + s * 0.6, y - s * 0.8); g.lineTo(x + s * 0.6, y + s * 0.8); g.closePath(); g.fill(); };
     g.save();
     g.globalAlpha = k; g.fillStyle = '#ff3b5c'; g.strokeStyle = '#ff3b5c'; g.lineWidth = 2; g.setLineDash([6, 5]);
