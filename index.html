@@ -447,12 +447,12 @@
     { id: 'rainbow', name: 'Gökkuşağı', icon: '🌈', trait: 'Dengeli · her duruma uyar',
       speed: 440, cd: 0.42, r: 13, stats: { hiz: 3, siklik: 3, guc: 3 } },
     { id: 'kiss', name: 'Öpücük', icon: '💋', trait: 'Yakındaki hedefe kıvrılır',
-      speed: 300, cd: 0.42, r: 10, homing: true, turn: 1.5, cone: 0.7, range: 220, maxAng: 0.6,
+      speed: 300, cd: 0.42, r: 10, homing: true, dmg: 0.5, turn: 1.5, cone: 0.7, range: 220, maxAng: 0.6,
       stats: { hiz: 2, siklik: 3, guc: 4 } },
     { id: 'stars', name: 'Yıldız Yağmuru', icon: '⭐', trait: 'Yelpaze gibi 3 yıldız atar',
-      speed: 470, cd: 0.5, r: 7, spread: true, dmg: 0.45, stats: { hiz: 4, siklik: 2, guc: 3 } },   // 3 mermi × 0,45: DPS tek mermili silahlarla eşit
+      speed: 470, cd: 0.5, r: 7, spread: true, dmg: 0.51, stats: { hiz: 4, siklik: 2, guc: 3 } },   // 3 mermi × 0,45: DPS tek mermili silahlarla eşit
     { id: 'disco', name: 'Disko Topu', icon: '🪩', trait: 'İri · borulardan ve düşmanlardan geçer',
-      speed: 280, cd: 0.5, r: 24, pierce: true, ghost: true, stats: { hiz: 2, siklik: 2, guc: 5 } },
+      speed: 280, cd: 0.5, r: 24, pierce: true, ghost: true, dmg: 1.05, stats: { hiz: 2, siklik: 2, guc: 5 } },
     { id: 'laser', name: 'Simli Lazer', icon: '✨', trait: 'Tek atışta 3 seri lazer · nişan ister',
       speed: 760, cd: 0.42, r: 7, burst: 3, dmg: 0.33, stats: { hiz: 5, siklik: 3, guc: 1 } },   // 3 seri × 0,33: DPS tek mermili silahlarla eşit
   ];
@@ -835,7 +835,7 @@
   // ===== BOSS SONU DERECESİ (S / A / B / C) — puana eklenmez, sadece gösterilir ve kaydedilir =====
   // Referans süre (par): ortalama botun o boss'taki ortalama dövüş süresi. Süre puanı: ≤0,75 par 3, ≤0,95 par 2, ≤1,25 par 1.
   // Hasar puanı: hiç vurulmadan +1, 1 isabet 0, 2-3 isabet -1, 4+ -2. Toplam ≥4 = S (hızlı VE hiç vurulmadan), 3 = A, 2 = B, altı C.
-  const BOSS_PAR = [32, 31, 36, 60, 88, 74, 74, 90, 96, 121, 94, 127, 150, 129, 154, 135, 160, 160, 158, 165];
+  const BOSS_PAR = [35, 32, 39, 62, 80, 74, 84, 92, 112, 120, 115, 117, 162, 131, 149, 134, 158, 143, 158, 140];
   const GRADES = ['C', 'B', 'A', 'S'], GRADE_COL = { S: '#ffe23b', A: '#ff5fb4', B: '#49c6ff', C: '#b8b8c4' };
   let gradeCard = null;
   const parOf = (L) => BOSS_PAR[Math.min(L, 19)] * (1 + 0.1 * Math.floor(L / BOSSES.length)) * (DK().hp);
@@ -991,6 +991,7 @@
   }
   // score = ortak ilerleme (zorluk için); her oyuncunun kendi puanı players[i].score
   // Hikaye modu durumu
+  const dbgC = { shots: 0, hits: 0, dmg: 0, kills: 0 };   // test sayaçları (yalnızca DEBUG_KEYS)
   let hitStopT = 0, slowT = 0, slowK = 1, zoomT = 0, zoomX = 0, zoomY = 0, hurtEdgeT = 0, defeatT = 0, defeatName = '', muzzles = [], rings = [];
   let incomingT = 0, heartPending = false, lostHeartT = 0, lives = 5, boss = null, bossPhase = null, bossCount = 0, nextBossAt = 25, ebullets = [], banners = [], phaseT = 0, bossTint = 0;
   const BOSS_EVERY = 25, MAX_LIVES = 5, SAVE_EVERY = 50;
@@ -1322,13 +1323,14 @@
     const make = (a, dy = 0, delay = 0) => ({ owner: pi, w: w.id, x: b.x + 18, y: b.y + 2 + dy, dy, vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed, t: 0, r: w.r, hit: [], emit: 0, delay });
     const dbl = qid(b) === 'yasmin';   // Yasmin – Çift Atış: silahın mermisini 2 katına çıkarır
     let pattern;
-    if (w.spread) pattern = dbl ? [-0.3, -0.18, -0.06, 0.06, 0.18, 0.3].map(a => [a, 0]) : [[-0.2, 0], [0, 0], [0.2, 0]];
+    if (w.spread) pattern = dbl ? [-0.13, -0.078, -0.026, 0.026, 0.078, 0.13].map(a => [a, 0]) : [[-0.09, 0], [0, 0], [0.09, 0]];   // yatay ekranda uzak hedefe dar yelpaze
     else pattern = (dbl && !w.burst) ? [[0, -13], [0, 13]] : [[0, 0]];   // lazer serisi ikiye katlanmaz
     const bursts = w.burst || 1;   // Simli Lazer: tek atışta 3 seri
     // mermi hasarı: silahın mermi başı hasarı; Yasmin'de mermi sayısı ikiye katlanınca yarısı (lazerde katlanmadığı için tam)
     const dmg = (w.dmg || 1) * (dbl && !w.burst ? 0.5 : 1);
     for (let k = 0; k < bursts; k++) pattern.forEach(([a, dy]) => { const m = make(a, dy, k * 0.07); m.dmg = dmg; shots.push(m); });
     muzzles.push({ x: b.x + 20, y: b.y + 2, t: 0, c: WCOL[w.id] || '#ffffff' });
+    if (DEBUG_KEYS) dbgC.shots += bursts * pattern.length;   // test sayacı (silah isabet oranı)
     sfx[w.id]();
   }
 
@@ -1420,6 +1422,7 @@
   }
 
   function killEnemy(e, wid, owner) {
+    if (DEBUG_KEYS) dbgC.kills++;
     e.dead = true;
     const shooter = players[owner];
     if (shooter) { addScore(shooter, 1); shooter.ult = Math.min(100, shooter.ult + 4); }
@@ -1674,6 +1677,7 @@
   function hurtBoss(s) {
     const shooter = players[s.owner];
     let dmg = s.dmg || (s.w === 'meteor' ? 8 : 1);
+    if (DEBUG_KEYS) { dbgC.hits++; dbgC.dmg += dmg; }
     dmg = mechDmg(boss, dmg, s);
     if (dmg <= 0) { burst(s.x, s.y, ['#ffffff', '#9aa4c4'], 3, 60); return; }   // kalkan/zırh/gölge: hasar yok
     boss.hp -= dmg;
@@ -1695,11 +1699,11 @@
   // her boss için: [ateş aralığı (sn), mermi hızı çarpanı, desen yoğunluğu 0..1, normal aşama süresi (sn), can çarpanı]
   // ★ tekrarlarında (L ≥ 20) ateş biraz sıklaşır, hız ve yoğunluk hafifçe artar.
   const BOSS_TUNE = [
-    [0.38, 1.60, 0.68, 7.50, 1.45], [0.38, 1.60, 0.68, 7.50, 1.45], [0.38, 1.60, 0.58, 7.50, 1.45], [0.38, 1.60, 0.73, 7.50, 1.45],
-    [0.38, 1.60, 0.66, 7.50, 1.45], [0.40, 1.39, 0.54, 7.40, 1.45], [0.38, 1.60, 0.77, 7.50, 1.45], [0.52, 1.19, 0.52, 6.60, 1.32],
-    [0.60, 1.12, 0.51, 6.30, 1.24], [0.55, 1.16, 0.59, 6.60, 1.27], [0.64, 1.08, 0.59, 6.10, 1.19], [0.50, 1.19, 0.71, 6.80, 1.31],
-    [0.62, 1.06, 0.67, 6.20, 1.17], [0.76, 0.98, 0.67, 5.90, 1.09], [0.41, 1.25, 0.94, 7.50, 1.40], [0.73, 0.99, 0.77, 6.10, 1.08],
-    [0.76, 0.97, 0.80, 6.10, 1.06], [0.79, 0.94, 0.83, 6.00, 1.03], [0.50, 1.11, 1.00, 7.00, 1.26], [0.88, 0.88, 0.88, 5.80, 0.96],
+    [0.38, 1.60, 1.00, 7.50, 1.45], [0.38, 1.60, 1.00, 7.50, 1.45], [0.38, 1.60, 0.84, 7.50, 1.45], [0.32, 1.76, 1.00, 7.50, 1.45],
+    [0.37, 1.62, 0.89, 7.50, 1.45], [0.42, 1.48, 0.59, 7.20, 1.40], [0.34, 1.66, 0.91, 7.50, 1.45], [0.46, 1.26, 0.56, 6.80, 1.36],
+    [0.56, 1.15, 0.52, 6.40, 1.26], [0.63, 1.11, 0.55, 6.20, 1.18], [0.52, 1.17, 0.67, 6.80, 1.35], [0.57, 1.14, 0.67, 6.50, 1.27],
+    [0.66, 1.02, 0.67, 6.10, 1.19], [0.73, 1.00, 0.67, 6.00, 1.10], [0.48, 1.21, 0.93, 7.40, 1.24], [0.87, 0.95, 0.74, 6.00, 0.89],
+    [0.84, 0.98, 0.81, 6.20, 0.92], [1.03, 0.86, 0.76, 5.50, 0.82], [0.53, 1.14, 0.97, 7.20, 1.12], [1.17, 0.85, 0.81, 5.20, 0.77],
   ];
   const bossTune = (B) => BOSS_TUNE[Math.min(B.L, 19)];
   const bossEnc = (B) => Math.floor(B.L / BOSSES.length);
@@ -1852,7 +1856,7 @@
   // güçlü vuruş: 40-60 ms "hit stop" + kısa sarsıntı + ses (parçacığı çağıran ekler)
   function impact(lv) { hitStopT = Math.max(hitStopT, 0.03 + 0.01 * Math.min(3, lv)); shake(lv * 2, 0.12 + lv * 0.04); if (lv >= 2) sfx.bigHit(); }
   const mechK = (B) => 1 + 0.15 * bossEnc(B);   // ★ döngüsünde mekanikler biraz güçlenir
-  const P2_POOL = ['ice', 'stone', 'regen', 'charge', 'drone', 'planets'];
+  const P2_POOL = ['ice', 'stone', 'regen', 'charge'];
   function mechInit(B) {
     B.mobs = []; B.mx = {}; B.mechs = MECH_OF[B.def.id] ? [MECH_OF[B.def.id]] : [];
     for (const m of B.mechs) { B.mx[m] = {}; MECHS[m].init && MECHS[m].init(B, B.mx[m]); }
@@ -1947,7 +1951,7 @@
     },
     // 12 Kara Elmas: 3 elmas zırh plakası; önce plakalar kırılır, sonra gövde hasar alır
     plates: {
-      init(B, s) { s.n = 3; s.per = Math.round(4 * mechK(B)); s.hp = s.per; },
+      init(B, s) { s.n = 3; s.per = Math.round(3 * mechK(B)); s.hp = s.per; },
       dmg(B, s, d) { if (s.n <= 0) return d; s.hp--; burst(B.x - 52, B.y - 40 + (3 - s.n) * 40, ['#e8f4ff', '#8a80c0'], 4, 90); sfx.iceTink();
         if (s.hp <= 0) { s.n--; s.hp = s.per; burst(B.x - 52, B.y - 40 + (2 - s.n) * 40, ['#ffffff', '#e8f4ff', '#5a5080'], 26, 220); impact(3); sfx.shieldBreak(); } return 0; },
       draw(B, s, g) { for (let i = 0; i < s.n; i++) { const x = B.x - 54, y = B.y - 40 + (2 - i) * 40 + Math.sin(time * 2 + i) * 3, cr = i === s.n - 1 ? 1 - s.hp / s.per : 0;
@@ -1960,8 +1964,8 @@
     bubble: {
       init(B, s) { s.t = 7; s.mob = null; },
       update(B, s, dt) { const m = s.mob;
-        if (m && m.alive) { m.x = B.x; m.y = B.y; m.t += dt; bossHeal(B, 0.012 * mechK(B) * dt); if (m.t > 5) { m.alive = false; s.mob = null; } return; }
-        s.t -= dt; if (s.t <= 0 && B.cyc === 'A') { s.t = 12 + Math.random() * 3; s.mob = addMob(B, { kind: 'bubble', hp: Math.round(5 * mechK(B)), r: 64, x: B.x, y: B.y }); s.mob.max = s.mob.hp; sfx.bubble(); } },
+        if (m && m.alive) { m.x = B.x; m.y = B.y; m.t += dt; bossHeal(B, 0.008 * mechK(B) * dt); if (m.t > 4) { m.alive = false; s.mob = null; } return; }
+        s.t -= dt; if (s.t <= 0 && B.cyc === 'A') { s.t = 15 + Math.random() * 3; s.mob = addMob(B, { kind: 'bubble', hp: Math.round(4 * mechK(B)), r: 64, x: B.x, y: B.y }); s.mob.max = s.mob.hp; sfx.bubble(); } },
       killed(B, s, m) { burst(m.x, m.y, ['#bff2ff', '#ffffff', '#7fe0ff'], 36, 220); impact(3); sfx.shieldBreak(); s.mob = null; },
       immune: (B, s) => s.mob && s.mob.alive,
       dmg: (B, s, d) => (s.mob && s.mob.alive) ? 0 : d,
@@ -2010,7 +2014,7 @@
     },
     // 18 Kozmik İmparatoriçe: etrafında dönen gezegenler mermileri engeller
     planets: {
-      init(B, s) { for (let k = 0; k < 2; k++) addMob(B, { kind: 'planet', hp: Infinity, r: 15, a: k * Math.PI, c: ['#9a6ad0', '#49c6ff', '#ff8a5a'][k] }); },
+      init(B, s) { for (let k = 0; k < 2; k++) addMob(B, { kind: 'planet', hp: Infinity, r: 12, a: k * Math.PI, c: ['#9a6ad0', '#49c6ff', '#ff8a5a'][k] }); },
       update(B, s, dt) { for (const m of B.mobs) if (m.kind === 'planet') { m.a += dt * 0.8 * mechK(B); m.x = B.x - 10 + Math.cos(m.a) * 76; m.y = B.y + Math.sin(m.a) * 70; } },
       status: () => [T('mech_planets'), null],
     },
@@ -2032,7 +2036,7 @@
       init(B, s) { s.t = 6; s.on = 0; },
       update(B, s, dt) { if (s.on > 0) { s.on -= dt; return; } s.t -= dt; if (s.t <= 0 && B.cyc === 'A') { s.t = 10 + Math.random() * 3; s.on = 2.2 * Math.min(1.3, mechK(B)); sfx.shadowIn(); } },
       immune: (B, s) => s.on > 0,
-      dmg(B, s, d, sh) { if (s.on <= 0) return d; if (sh && Math.random() < 0.4) { const tg = players.find(p => p.alive); if (tg) { const a = Math.atan2(tg.y - sh.y, tg.x - sh.x) + (Math.random() - 0.5) * 0.5, v = 300; shootBullet(B, sh.x - 10, sh.y, Math.cos(a) * v, Math.sin(a) * v, { kind: 'shardm', r: 6 }); } } return 0; },
+      dmg(B, s, d, sh) { if (s.on <= 0) return d; if (sh && Math.random() < 0.3) { const tg = players.find(p => p.alive); if (tg) { const a = Math.atan2(tg.y - sh.y, tg.x - sh.x) + (Math.random() - 0.5) * 0.5, v = 300; shootBullet(B, sh.x - 10, sh.y, Math.cos(a) * v, Math.sin(a) * v, { kind: 'shardm', r: 6 }); } } return 0; },
       draw(B, s, g) { if (s.on <= 0) return; g.save(); g.globalAlpha = 0.5 + 0.2 * Math.sin(time * 10); const gg = g.createLinearGradient(B.x - 66, B.y - 66, B.x + 66, B.y + 66); gg.addColorStop(0, 'rgba(255,255,255,.35)'); gg.addColorStop(0.5, 'rgba(180,190,230,.12)'); gg.addColorStop(1, 'rgba(255,255,255,.35)');
         g.fillStyle = gg; circ(g, B.x, B.y, 66); g.fill(); g.restore(); ring(g, B.x, B.y, 66, '#ffffff', 3, 0.9); },
       phase2(B, s) { const pool = P2_POOL.slice().sort(() => Math.random() - 0.5); mechAdd(B, pool[0]); mechAdd(B, pool[1]); hudNote(T('mech_' + pool[0]) + ' + ' + T('mech_' + pool[1]), '#ffffff', 3); },
@@ -2730,6 +2734,8 @@
             const d = ex * ex + ey * ey;
             if (d < bd) { bd = d; target = e; }
           }
+          // düşman yoksa öndeki boss'a da hafifçe yönelir (öpücük takip eder)
+          if (!target && boss && boss.phase === 'fight' && boss.x > s.x && boss.x - s.x < 560 && Math.abs(Math.atan2(boss.y - s.y, boss.x - s.x)) < 0.75) target = boss;
           if (target) {
             const cur = Math.atan2(s.vy, s.vx), want = Math.atan2(target.y - s.y, target.x - s.x);
             let diff = want - cur;
@@ -6153,7 +6159,7 @@
     get p() { return players; }, get boss() { return boss; }, get eb() { return ebullets; }, get pipes() { return pipes; },
     get enemies() { return enemies; }, get banners() { return banners; },
     flap: (i = 0) => flap(i), shoot: (i = 0) => shoot(i), ult: (i = 0) => useUlt(i),
-    setFlash: (f) => { flash = f; stormFlash = f; }, opt: OPT, hurtMe: () => killPlayer(players[0]), gfxOk: () => Object.values(GFX.boss).every(i => i.ok) && Object.values(GFX.bird).every(s => s.mid.ok), get music() { return music; }, audioLevel() { if (!actx || !busIn) return null; if (!window.__an) { window.__an = actx.createAnalyser(); window.__an.fftSize = 2048; busIn.music.connect(window.__an); } const d = new Float32Array(2048); window.__an.getFloatTimeDomainData(d); let pk = 0, s = 0; for (const v of d) { pk = Math.max(pk, Math.abs(v)); s += v * v; } return [Math.round(pk * 1000) / 1000, Math.round(Math.sqrt(s / d.length) * 1000) / 1000]; },
+    setFlash: (f) => { flash = f; stormFlash = f; }, opt: OPT, hurtMe: () => killPlayer(players[0]), cnt: dbgC, gfxOk: () => Object.values(GFX.boss).every(i => i.ok) && Object.values(GFX.bird).every(s => s.mid.ok), get music() { return music; }, audioLevel() { if (!actx || !busIn) return null; if (!window.__an) { window.__an = actx.createAnalyser(); window.__an.fftSize = 2048; busIn.music.connect(window.__an); } const d = new Float32Array(2048); window.__an.getFloatTimeDomainData(d); let pk = 0, s = 0; for (const v of d) { pk = Math.max(pk, Math.abs(v)); s += v * v; } return [Math.round(pk * 1000) / 1000, Math.round(Math.sqrt(s / d.length) * 1000) / 1000]; },
     art: () => boss ? { c: bossCircs(boss), m: bossMouth(boss), h: bossHeadTop(boss) } : null,
     danger: (x, y, r, dt) => (typeof predictDanger === 'function' ? predictDanger(x, y, r, dt) : 0),
     // hikayeyi L. boss'un hemen öncesinden başlat (q: hikaye kuşu indeksi)
