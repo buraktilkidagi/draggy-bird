@@ -493,6 +493,169 @@
     const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(f); f.connect(g); g.connect(out); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
   }
+
+  // ================= MÜZİK MOTORU (WebAudio, ses dosyası yok) =================
+  // Her parça bir "track" tanımıdır. MUSIC_FILES'ta o parça için bir dosya yolu varsa (ör. 'assets/music/kuzgun.ogg')
+  // dosya döngüyle çalar; yoksa ya da yüklenemezse prosedürel sürüm çalar. Gerçek müzik gelince yalnızca bu listeyi doldur.
+  const MUSIC_FILES = {};   // { menu: 'assets/music/menu.ogg', kuzgun: 'assets/music/kuzgun.ogg', 'kuzgun:boss': '...' }
+  const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], harm: [0, 2, 3, 5, 7, 8, 11], dorian: [0, 2, 3, 5, 7, 9, 10],
+    phryg: [0, 1, 3, 5, 7, 8, 10], hijaz: [0, 1, 4, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], penta: [0, 2, 4, 7, 9, 12, 14], whole: [0, 2, 4, 6, 8, 10, 12] };
+  // root: MIDI, bpm, meter (3/4 ya da 4/4), prog: akor dereceleri, lead/pad/bass sesi, dr: davul tarzı
+  const TRACKS = {
+    menu:      { root: 53, sc: 'major',  bpm: 124, m: 4, prog: [0, 4, 5, 3], lead: 'pluck',  pad: 'pad',   bass: 'synth', dr: 'pop' },
+    arcade:    { root: 55, sc: 'penta',  bpm: 132, m: 4, prog: [0, 3, 4, 0], lead: 'square', pad: null,    bass: 'synth', dr: 'pop' },
+    kuzgun:    { root: 50, sc: 'harm',   bpm: 92,  m: 4, prog: [0, 5, 3, 4], lead: 'organ',  pad: 'organ', bass: 'organ', dr: 'gothic' },
+    madam:     { root: 57, sc: 'minor',  bpm: 150, m: 3, prog: [0, 3, 4, 0], lead: 'accord', pad: null,    bass: 'oompah', dr: 'waltz' },
+    paparazza: { root: 52, sc: 'dorian', bpm: 108, m: 4, prog: [0, 3, 0, 4], lead: 'brass',  pad: null,    bass: 'slap',  dr: 'funk' },
+    golge:     { root: 48, sc: 'minor',  bpm: 100, m: 4, prog: [0, 5, 2, 6], lead: 'saw',    pad: 'pad',   bass: 'synth', dr: 'synth' },
+    kristal:   { root: 54, sc: 'lydian', bpm: 96,  m: 4, prog: [0, 1, 4, 3], lead: 'bell',   pad: 'pad',   bass: 'soft',  dr: 'light' },
+    sarmasik:  { root: 55, sc: 'penta',  bpm: 112, m: 4, prog: [0, 3, 4, 3], lead: 'marimba', pad: null,   bass: 'soft',  dr: 'tribal' },
+    disko:     { root: 57, sc: 'dorian', bpm: 120, m: 4, prog: [0, 3, 6, 4], lead: 'square', pad: 'str',   bass: 'octave', dr: 'disco' },
+    medusa:    { root: 50, sc: 'phryg',  bpm: 104, m: 4, prog: [0, 1, 0, 6], lead: 'pluck',  pad: 'pad',   bass: 'soft',  dr: 'tribal' },
+    siber:     { root: 53, sc: 'minor',  bpm: 100, m: 4, prog: [0, 5, 6, 4], lead: 'saw',    pad: 'pad',   bass: 'octave', dr: 'synth', arp: 1 },
+    vampir:    { root: 52, sc: 'harm',   bpm: 138, m: 3, prog: [0, 3, 4, 0], lead: 'harpsi', pad: 'organ', bass: 'oompah', dr: 'waltz' },
+    firavun:   { root: 50, sc: 'hijaz',  bpm: 96,  m: 4, prog: [0, 1, 0, 6], lead: 'pluck',  pad: null,    bass: 'soft',  dr: 'doumbek' },
+    elmas:     { root: 49, sc: 'minor',  bpm: 116, m: 4, prog: [0, 6, 5, 4], lead: 'saw',    pad: 'pad',   bass: 'octave', dr: 'synth', arp: 1 },
+    siren:     { root: 52, sc: 'lydian', bpm: 76,  m: 4, prog: [0, 4, 1, 3], lead: 'bell',   pad: 'pad',   bass: 'soft',  dr: 'ambient' },
+    bonbon:    { root: 60, sc: 'major',  bpm: 128, m: 4, prog: [0, 5, 3, 4], lead: 'square', pad: 'str',   bass: 'synth', dr: 'pop' },
+    sirk:      { root: 58, sc: 'major',  bpm: 168, m: 3, prog: [0, 4, 4, 0], lead: 'accord', pad: null,    bass: 'oompah', dr: 'waltz' },
+    mekanika:  { root: 40, sc: 'phryg',  bpm: 118, m: 4, prog: [0, 1, 0, 6], lead: 'saw',    pad: null,    bass: 'octave', dr: 'indus' },
+    mantar:    { root: 57, sc: 'dorian', bpm: 90,  m: 4, prog: [0, 3, 6, 4], lead: 'flute',  pad: 'pad',   bass: 'soft',  dr: 'light' },
+    kozmik:    { root: 50, sc: 'whole',  bpm: 96,  m: 4, prog: [0, 2, 1, 3], lead: 'bell',   pad: 'pad',   bass: 'synth', dr: 'synth', arp: 1 },
+    firtina:   { root: 50, sc: 'minor',  bpm: 112, m: 4, prog: [0, 5, 6, 4], lead: 'brass',  pad: 'str',   bass: 'octave', dr: 'epic' },
+    ayna:      { root: 48, sc: 'harm',   bpm: 120, m: 4, prog: [0, 5, 3, 4], lead: 'organ',  pad: 'str',   bass: 'octave', dr: 'epic', arp: 1 },
+  };
+  const mtof = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  function seeded(str) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
+  // parçanın notalarını bir kez üretir: 8 ölçü, A A' B A'' motif yapısı (kulak yormasın diye tekrar eden ama değişen)
+  function composeTrack(name) {
+    const D = TRACKS[name], R = seeded(name), sc = SCALES[D.sc], steps = D.m * 2;   // ölçü başına 8'lik sayısı
+    const deg = (d) => { const o = Math.floor(d / sc.length), i = ((d % sc.length) + sc.length) % sc.length; return sc[i] + 12 * o; };
+    const motif = [];
+    for (let i = 0; i < steps * 2; i++) { const strong = i % (D.m === 3 ? 3 : 2) === 0; motif.push(R() < (strong ? 0.12 : 0.38) ? null : (strong ? [0, 2, 4][Math.floor(R() * 3)] : Math.floor(R() * 5) - 1)); }
+    const vary = (m, k) => m.map((v, i) => v == null ? (R() < 0.12 * k ? 2 : null) : (i % 3 === 2 && R() < 0.3 * k ? v + (R() < 0.5 ? 1 : -1) : v));
+    const B2 = motif.map((v, i) => v == null ? null : v + 2 + (i % 4 === 0 ? 1 : 0));
+    const mel = [].concat(motif, vary(motif, 1), B2, vary(motif, 2));   // 8 ölçü
+    return { D, deg, steps, mel, bars: 8 };
+  }
+  const music = { cur: null, want: null, mode: 'calm', nodes: [], t0: 0, next: 0, step: 0, timer: null, gainNode: null, lastName: null, duck: 1 };
+  function musicOut() { return audioBus('music'); }
+  // enstrüman sesleri (kısa, hafif, kulak yormayan)
+  function inst(kind, f, t, dur, vol, out) {
+    if (vol <= 0) return;
+    const g = actx.createGain(), fl = actx.createBiquadFilter(); fl.type = 'lowpass';
+    const env = (a, d) => { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + d); };
+    const osc = (type, fr, det = 0, gain = 1) => { const o = actx.createOscillator(); o.type = type; o.frequency.setValueAtTime(fr, t); o.detune.value = det; const og = actx.createGain(); og.gain.value = gain; o.connect(og); og.connect(fl); o.start(t); o.stop(t + dur + 0.05); return o; };
+    switch (kind) {
+      case 'organ': fl.frequency.value = 3200; env(0.02, dur); osc('sine', f, 0, 1); osc('sine', f * 2, 0, 0.5); osc('sine', f * 3, 0, 0.25); osc('sine', f * 4, 0, 0.12); break;
+      case 'accord': fl.frequency.value = 2600; env(0.03, dur); osc('square', f, -8, 0.5); osc('square', f, 9, 0.5); osc('sawtooth', f * 2, 0, 0.15); break;
+      case 'brass': fl.frequency.setValueAtTime(900, t); fl.frequency.exponentialRampToValueAtTime(3200, t + 0.05); env(0.02, dur * 0.9); osc('sawtooth', f, -5, 0.6); osc('sawtooth', f, 6, 0.6); break;
+      case 'bell': fl.frequency.value = 8000; env(0.003, dur * 1.8); osc('sine', f * 2, 0, 1); osc('sine', f * 5.4, 0, 0.18); break;
+      case 'marimba': fl.frequency.value = 3000; env(0.003, Math.min(0.35, dur)); osc('sine', f, 0, 1); osc('sine', f * 4, 0, 0.15); break;
+      case 'harpsi': fl.frequency.value = 4500; env(0.002, Math.min(0.5, dur)); osc('sawtooth', f, 0, 0.5); osc('square', f * 2, 3, 0.2); break;
+      case 'flute': fl.frequency.value = 2400; env(0.06, dur); osc('sine', f, 0, 1); osc('triangle', f * 2, 0, 0.12); break;
+      case 'pluck': fl.frequency.setValueAtTime(4200, t); fl.frequency.exponentialRampToValueAtTime(700, t + 0.25); env(0.003, Math.min(0.45, dur)); osc('sawtooth', f, 0, 0.6); osc('triangle', f, 4, 0.5); break;
+      case 'square': fl.frequency.value = 3000; env(0.01, dur * 0.85); osc('square', f, -4, 0.45); osc('square', f, 5, 0.3); break;
+      case 'saw': fl.frequency.value = 2600; env(0.01, dur * 0.85); osc('sawtooth', f, -7, 0.5); osc('sawtooth', f, 7, 0.5); break;
+      case 'pad': fl.frequency.value = 1400; env(0.25, dur); osc('sawtooth', f, -10, 0.3); osc('sawtooth', f, 10, 0.3); osc('triangle', f / 2, 0, 0.3); break;
+      case 'str': fl.frequency.value = 2000; env(0.12, dur); osc('sawtooth', f, -12, 0.3); osc('sawtooth', f, 12, 0.3); osc('sawtooth', f * 2, 0, 0.12); break;
+      case 'bass': fl.frequency.value = 700; env(0.005, dur * 0.9); osc('triangle', f, 0, 1); osc('square', f, 0, 0.25); break;
+      default: fl.frequency.value = 2000; env(0.01, dur); osc('triangle', f, 0, 1);
+    }
+    fl.connect(g); g.connect(out);
+  }
+  function drum(kind, t, vol, out) {
+    if (vol <= 0) return;
+    const g = actx.createGain(); g.connect(out);
+    if (kind === 'kick') { const o = actx.createOscillator(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); o.connect(g); o.start(t); o.stop(t + 0.25); return; }
+    if (kind === 'tom') { const o = actx.createOscillator(); o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.2); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3); o.connect(g); o.start(t); o.stop(t + 0.32); return; }
+    const s = actx.createBufferSource(); s.buffer = noiseBuf; const f = actx.createBiquadFilter();
+    const P = { snare: ['bandpass', 1800, 0.16], hat: ['highpass', 7500, 0.04], ohat: ['highpass', 6500, 0.16], shaker: ['highpass', 5000, 0.07], clap: ['bandpass', 1200, 0.12], metal: ['bandpass', 3200, 0.09], crash: ['highpass', 4500, 0.9], riser: ['bandpass', 600, 1.6] }[kind] || ['highpass', 6000, 0.05];
+    f.type = P[0]; f.frequency.setValueAtTime(P[1], t); f.Q.value = kind === 'metal' ? 6 : 0.8; if (kind === 'riser') f.frequency.exponentialRampToValueAtTime(5000, t + P[2]);
+    g.gain.setValueAtTime(kind === 'riser' ? 0.0001 : vol, t); if (kind === 'riser') g.gain.exponentialRampToValueAtTime(vol, t + P[2] * 0.9);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + P[2]); s.connect(f); f.connect(g); s.start(t, Math.random() * 0.5); s.stop(t + P[2] + 0.02);
+  }
+  // bir 8'lik adımı çal (mode: calm / boss / squeeze / open)
+  function playStep(C, i, t, spb8, mode, out) {
+    const D = C.D, m = D.m, steps = C.steps, bar = Math.floor(i / steps) % C.bars, s = i % steps, beat = s % 2 === 0 ? s / 2 : -1;
+    const boss = mode !== 'calm', hot = mode === 'open', tense = mode === 'squeeze';
+    const chordDeg = D.prog[Math.floor(bar / 2) % D.prog.length], root = D.root;
+    const tone = (d, oct = 0) => mtof(root + C.deg(chordDeg + d) + 12 * oct);
+    // akor / pad: her ölçü başı
+    if (s === 0 && D.pad) for (const d of [0, 2, 4]) inst(D.pad, tone(d), t, spb8 * steps * 0.98, boss ? 0.018 : 0.022, out);
+    // bas
+    const bv = boss ? 0.09 : 0.07;
+    if (D.bass === 'oompah') { if (s % 2 === 0) inst('bass', beat === 0 ? tone(0, -2) : tone(beat === 1 ? 4 : 2, -1), t, spb8 * 1.4, beat === 0 ? bv : bv * 0.6, out); }
+    else if (D.bass === 'octave' || boss) { inst('bass', tone(0, s % 2 ? -1 : -2), t, spb8 * 0.9, bv * (s % 2 ? 0.7 : 1), out); }
+    else if (D.bass === 'slap') { if ([0, 3, 4, 6, 7].includes(s % 8)) inst('bass', tone(s % 8 === 3 ? 4 : 0, -2), t, spb8 * 0.8, bv, out); }
+    else if (s % 2 === 0) inst('bass', tone(beat % 2 ? 4 : 0, -2), t, spb8 * 1.8, bv, out);
+    // melodi
+    const n = C.mel[(bar * steps + s) % C.mel.length];
+    if (n != null) { inst(D.lead, mtof(root + 12 + C.deg(n + chordDeg * 0)), t, spb8 * (D.lead === 'bell' || D.lead === 'pad' ? 2.5 : 1.1), boss ? 0.05 : 0.045, out);
+      if (boss) inst(D.lead === 'organ' ? 'organ' : 'square', mtof(root + 24 + C.deg(n)), t, spb8 * 0.8, 0.015, out); }   // boss: oktav katmanı
+    // arpej (synthwave/kozmik ya da boss/açık verme)
+    if (D.arp || hot || (boss && D.dr !== 'waltz')) for (let k = 0; k < 2; k++) inst(hot ? 'square' : 'pluck', tone([0, 2, 4, 7][(s * 2 + k) % 4], 1), t + k * spb8 / 2, spb8 * 0.45, hot ? 0.022 : 0.016, out);
+    // davul
+    const dv = boss ? 1.25 : 1, dr = D.dr;
+    const K = (x) => drum('kick', t, 0.16 * dv * x, out), SN = (x) => drum('snare', t, 0.07 * dv * x, out), HH = (x, tt = t) => drum('hat', tt, 0.025 * dv * x, out);
+    if (m === 3) {   // vals: güm-çak-çak
+      if (s === 0) K(1); if (s === 2 || s === 4) SN(0.6); if (boss) HH(1); if (boss && s === 0) drum('crash', t, bar % 4 === 0 ? 0.03 : 0, out);
+    } else switch (dr) {
+      case 'disco': if (s % 2 === 0) K(1); if (s % 4 === 2) drum('clap', t, 0.06 * dv, out); if (s % 2 === 1) drum('ohat', t, 0.03 * dv, out); break;
+      case 'funk': if (s === 0 || s === 5) K(1); if (s % 4 === 2) SN(1); HH(0.9); if (s === 7) SN(0.4); break;
+      case 'tribal': case 'doumbek': if (s === 0 || s === 3 || s === 6) drum('tom', t, 0.09 * dv, out); if (s % 4 === 2) drum('clap', t, 0.04 * dv, out); drum('shaker', t, 0.018 * dv, out); if (boss && s % 2 === 0) K(0.8); break;
+      case 'indus': if (s % 2 === 0) K(1); if (s % 4 === 2) drum('metal', t, 0.07 * dv, out); HH(1); if (s % 8 === 7) drum('metal', t, 0.04, out); break;
+      case 'gothic': if (s === 0 || (boss && s === 4)) K(1); if (s === 4 && !boss) SN(0.5); if (boss && s % 4 === 2) SN(0.8); if (boss) HH(0.7); break;
+      case 'ambient': if (s === 0) K(0.6); if (boss && s % 4 === 2) SN(0.6); drum('shaker', t, boss ? 0.02 : 0.01, out); break;
+      case 'light': if (s === 0) K(0.7); if (s === 4) drum('clap', t, 0.035, out); HH(0.6); if (boss && s % 2 === 0) K(0.6); break;
+      case 'epic': if (s % 2 === 0) K(1); if (s % 4 === 2) SN(1); if (s === 6 || s === 7) drum('tom', t, 0.08 * dv, out); if (s === 0 && bar % 2 === 0) drum('crash', t, 0.03, out); HH(0.8); break;
+      default: if (s === 0 || s === 4 || (boss && s % 2 === 0)) K(1); if (s % 4 === 2) SN(1); HH(boss ? 1 : 0.8);   // pop / synth
+    }
+    if (hot) { HH(1.2, t + spb8 / 2); if (s % 2 === 0) drum('clap', t, 0.04, out); }   // açık verme: "vur şimdi" — 16'lık hi-hat ve el çırpma
+    if (tense) { if (s === 0) drum('riser', t, 0.05, out); if (s % 2 === 0) inst('square', mtof(root + 36 + (bar % 2)), t, spb8 * 0.4, 0.012, out); }   // daraltma: gerilim
+  }
+  // zamanlayıcı: 25 ms'de bir ileriye 0,12 sn'lik notaları yerleştirir; parça değişince yumuşak geçiş
+  function musicTick() {
+    if (!actx) return;
+    if (!noiseBuf) audioBus('music');   // kanallar henüz kurulmadıysa kur
+    const want = music.want, now = actx.currentTime;
+    if (want !== music.lastName) {
+      if (music.gainNode) { const g = music.gainNode; g.gain.cancelScheduledValues(now); g.gain.setValueAtTime(g.gain.value, now); g.gain.linearRampToValueAtTime(0.0001, now + 1.4); setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 1600); }
+      if (music.el) { const el = music.el; let v = el.volume; const iv = setInterval(() => { v -= 0.08; if (v <= 0) { el.pause(); clearInterval(iv); } else el.volume = v; }, 100); music.el = null; }
+      music.lastName = want; music.gainNode = null; music.cur = null;
+      if (!want) return;
+      const g = actx.createGain(); g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(1, now + 1.2); g.connect(musicOut()); music.gainNode = g;
+      const file = MUSIC_FILES[want + (music.mode !== 'calm' ? ':boss' : '')] || MUSIC_FILES[want];
+      if (file) { try { const el = new Audio(file); el.loop = true; el.volume = 0; el.onerror = () => { music.el = null; music.cur = composeTrack(want); }; el.play().catch(() => {}); music.el = el; const iv = setInterval(() => { if (!music.el || music.el !== el || el.volume >= 0.95) { clearInterval(iv); return; } el.volume = Math.min(1, el.volume + 0.08); }, 100); } catch (e) { music.el = null; } }
+      if (!music.el) music.cur = composeTrack(want);
+      music.next = now + 0.08; music.step = 0;
+    }
+    if (music.el) { music.el.volume = Math.max(0, Math.min(1, masterVol * OPT.music * music.duck * (muted ? 0 : 1))); return; }
+    const C = music.cur; if (!C) return;
+    if (music.gainNode) music.gainNode.gain.setTargetAtTime(music.duck, now, 0.2);
+    const bpm = C.D.bpm * (music.mode === 'calm' ? 1 : music.mode === 'open' ? 1.22 : 1.16), spb8 = 30 / bpm;
+    if (music.next < now - 0.3) music.next = now + 0.05;   // sekme açıldı / uzun duraklama
+    while (music.next < now + 0.12) { if (!muted && masterVol > 0 && OPT.music > 0) playStep(C, music.step, music.next, spb8, music.mode, music.gainNode); music.step++; music.next += spb8; }
+  }
+  // oyun durumuna göre hangi parça ve hangi hal çalsın
+  function musicWant() {
+    if (state === 'title' || state === 'menu' || overlayOpen('menu')) return ['menu', 'calm'];
+    if (mode !== 3) return ['arcade', state === 'play' ? 'boss' : 'calm'];
+    if (state === 'ready') return [partyT < PARTY_END ? null : themeTo, 'calm'];   // parti sahnesinin kendi ritmi var
+    let md = 'calm';
+    if (boss && boss.phase !== 'dying') md = boss.ultPrep || boss.ultAct ? 'squeeze' : boss.cyc === 'C' ? 'open' : 'boss';
+    else if (bossPhase === 'incoming') md = 'boss';
+    return [themeTo, md];
+  }
+  function updateMusic() {
+    if (!actx) return;
+    const [name, md] = musicWant();
+    music.want = name; music.mode = md;
+    music.duck = paused ? 0.35 : state === 'dead' ? 0.45 : 1;
+    musicTick();
+  }
+  setInterval(() => { try { updateMusic(); } catch (e) {} }, 25);
+
   const sfx = {
     flap: () => beep(520, 0.12, 'square', 0.04, 300),
     score: () => { beep(988, 0.07, 'triangle', 0.05, 200); beep(1480, 0.12, 'sine', 0.045, 0, 0.05); noiseHit(0.05, 0.02, 6000, 1, 0, 'highpass'); },
@@ -1254,6 +1417,7 @@
       boss.phase = 'dying'; boss.t = 0; boss.beam = null; boss.tele = null; boss.ultAct = null; boss.ultPrep = 0; uhz = [];
       ebullets = []; boss.mobs = [];
       flash = 0.8; sfx.bossDown(); setTimeout(() => sfx.victory(), 420);
+      if (music.gainNode && actx) { const g = music.gainNode, n = actx.currentTime; g.gain.cancelScheduledValues(n); g.gain.setValueAtTime(g.gain.value, n); g.gain.linearRampToValueAtTime(0.15, n + 0.3); g.gain.linearRampToValueAtTime(1, n + 3.2); }
       slowT = 0.5; slowK = 0.3; zoomT = 0.9; zoomX = boss.x; zoomY = boss.y; hitStopT = 0.06; shake(7, 0.4);
       defeatT = 2.4; defeatName = boss.name.toUpperCase();
       popRing(boss.x, boss.y, '#ffffff', 20, 260, 0.7); popRing(boss.x, boss.y, boss.def.glow, 10, 180, 0.55);
@@ -5574,7 +5738,7 @@
     get p() { return players; }, get boss() { return boss; }, get eb() { return ebullets; }, get pipes() { return pipes; },
     get enemies() { return enemies; }, get banners() { return banners; },
     flap: (i = 0) => flap(i), shoot: (i = 0) => shoot(i), ult: (i = 0) => useUlt(i),
-    setFlash: (f) => { flash = f; stormFlash = f; }, opt: OPT, hurtMe: () => killPlayer(players[0]),
+    setFlash: (f) => { flash = f; stormFlash = f; }, opt: OPT, hurtMe: () => killPlayer(players[0]), get music() { return music; }, audioLevel() { if (!actx || !busIn) return null; if (!window.__an) { window.__an = actx.createAnalyser(); window.__an.fftSize = 2048; busIn.music.connect(window.__an); } const d = new Float32Array(2048); window.__an.getFloatTimeDomainData(d); let pk = 0, s = 0; for (const v of d) { pk = Math.max(pk, Math.abs(v)); s += v * v; } return [Math.round(pk * 1000) / 1000, Math.round(Math.sqrt(s / d.length) * 1000) / 1000]; },
     art: () => boss ? { c: bossCircs(boss), m: bossMouth(boss), h: bossHeadTop(boss) } : null,
     danger: (x, y, r, dt) => (typeof predictDanger === 'function' ? predictDanger(x, y, r, dt) : 0),
     // hikayeyi L. boss'un hemen öncesinden başlat (q: hikaye kuşu indeksi)
