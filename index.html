@@ -453,26 +453,56 @@
   let shakeA = 0, shakeT = 0, shakeD = 1;
   function shake(a, d = 0.25) { const cur = shakeT > 0 ? shakeA * shakeT / shakeD : 0; if (a >= cur) { shakeA = a; shakeT = d; shakeD = d; } }
   // bus: 'sfx' (efekt) ya da 'music' (müzik) — her biri kendi ses seviyesiyle
+  // ===== SES MOTORU: katmanlı, kısa yankılı (efekt ve müzik ayrı kanallar, ortak kompresör) =====
+  let busIn = null, noiseBuf = null;
+  function audioBus(bus) {
+    if (!busIn) {
+      const out = actx.createDynamicsCompressor(); out.threshold.value = -16; out.knee.value = 12; out.ratio.value = 3.5; out.connect(actx.destination);
+      const rev = actx.createConvolver(), len = Math.floor(actx.sampleRate * 1.2), ir = actx.createBuffer(2, len, actx.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.4); }
+      rev.buffer = ir; rev.connect(out);
+      busIn = {};
+      for (const [k, send] of [['sfx', 0.14], ['music', 0.2]]) { const g = actx.createGain(); g.connect(out); const s = actx.createGain(); s.gain.value = send; g.connect(s); s.connect(rev); busIn[k] = g; }
+      noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate); const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    }
+    return busIn[bus] || busIn.sfx;
+  }
   function beep(freq, dur, type = 'square', vol = 0.08, slide = 0, delay = 0, bus = 'sfx') {
     if (muted || !actx || masterVol <= 0) return;
     vol *= masterVol * (bus === 'music' ? OPT.music : OPT.sfx);
     if (vol <= 0) return;
-    const t = actx.currentTime + delay;
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, t);
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(actx.destination);
-    o.start(t); o.stop(t + dur + 0.02);
+    const t = actx.currentTime + delay, out = audioBus(bus);
+    const g = actx.createGain(), f = actx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = (type === 'square' || type === 'sawtooth') ? 4200 : 9000; f.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    f.connect(g); g.connect(out);
+    const n = type === 'sine' ? 1 : 2;   // ikinci, hafif kaydırılmış osilatör: bip değil dolgun ton
+    for (let k = 0; k < n; k++) {
+      const o = actx.createOscillator(); o.type = type; o.detune.value = k ? 9 : -4;
+      o.frequency.setValueAtTime(freq, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+      const og = actx.createGain(); og.gain.value = k ? 0.45 : 1; o.connect(og); og.connect(f); o.start(t); o.stop(t + dur + 0.03);
+    }
+  }
+  // gürültü katmanı: darbe, patlama, cam kırılması, nefes
+  function noiseHit(dur, vol, freq = 1200, q = 0.8, delay = 0, type = 'bandpass', slide = 0) {
+    if (muted || !actx || masterVol <= 0) return;
+    vol *= masterVol * OPT.sfx; if (vol <= 0) return;
+    const t = actx.currentTime + delay, out = audioBus('sfx');
+    const s = actx.createBufferSource(); s.buffer = noiseBuf; const f = actx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (slide) f.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(out); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
   }
   const sfx = {
     flap: () => beep(520, 0.12, 'square', 0.04, 300),
-    score: () => { beep(880, 0.08, 'square', 0.05); beep(1320, 0.12, 'square', 0.05, 0, 0.07); },
-    hit: () => beep(200, 0.3, 'sawtooth', 0.1, -150),
-    die: () => beep(400, 0.5, 'triangle', 0.08, -320, 0.18),
-    pop: () => { beep(300, 0.15, 'square', 0.05, -200); beep(1000, 0.1, 'triangle', 0.05, 400, 0.06); },
+    score: () => { beep(988, 0.07, 'triangle', 0.05, 200); beep(1480, 0.12, 'sine', 0.045, 0, 0.05); noiseHit(0.05, 0.02, 6000, 1, 0, 'highpass'); },
+    hit: () => { noiseHit(0.22, 0.16, 300, 0.7, 0, 'lowpass', -200); beep(220, 0.3, 'sawtooth', 0.08, -160); beep(70, 0.25, 'sine', 0.14, -30); },
+    die: () => { beep(420, 0.5, 'triangle', 0.07, -320, 0.16); noiseHit(0.45, 0.05, 800, 0.6, 0.16, 'bandpass', -600); },
+    pop: () => { beep(320, 0.14, 'sine', 0.07, -180); beep(1100, 0.09, 'triangle', 0.04, 500, 0.05); noiseHit(0.06, 0.04, 2500, 1.2); },
+    hurt: () => { noiseHit(0.3, 0.2, 180, 0.7, 0, 'lowpass'); beep(110, 0.35, 'sawtooth', 0.09, -60); beep(55, 0.4, 'sine', 0.16, -15); },
+    bigHit: () => { noiseHit(0.18, 0.16, 260, 0.8, 0, 'lowpass'); beep(90, 0.22, 'sine', 0.16, -40); beep(1400, 0.08, 'square', 0.03, -800); },
+    victory: () => { [523, 659, 784, 1047].forEach((f, i) => { beep(f, 0.22, 'triangle', 0.06, 0, i * 0.09); beep(f / 2, 0.3, 'sine', 0.05, 0, i * 0.09); }); [1047, 1319, 1568].forEach(f => beep(f, 0.8, 'triangle', 0.045, 0, 0.42)); noiseHit(0.9, 0.03, 7000, 0.6, 0.42, 'highpass'); },
+    muzzle: () => noiseHit(0.04, 0.025, 3500, 1.4),
     select: () => { beep(660, 0.07, 'triangle', 0.05); beep(990, 0.09, 'triangle', 0.05, 0, 0.06); },
     rainbow: () => { beep(700, 0.12, 'triangle', 0.05, 700); beep(1400, 0.08, 'sine', 0.03, 0, 0.04); },
     kiss: () => { beep(500, 0.07, 'sine', 0.07, -150); beep(1100, 0.12, 'sine', 0.05, 500, 0.06); },
@@ -482,11 +512,11 @@
     bump: () => beep(180, 0.09, 'sine', 0.08, 120),
     ult: () => { [523, 784, 1047, 1568].forEach((f, i) => beep(f, 0.16, 'triangle', 0.06, 200, i * 0.06)); },
     ultReady: () => { beep(1047, 0.08, 'sine', 0.04); beep(1568, 0.12, 'sine', 0.04, 0, 0.08); },
-    bossHit: () => beep(240, 0.06, 'square', 0.035, -80),
+    bossHit: () => { noiseHit(0.05, 0.05, 1600, 1.2); beep(260, 0.06, 'square', 0.03, -90); beep(130, 0.07, 'sine', 0.05, -30); },
     taunt: () => { beep(520, 0.08, 'triangle', 0.04, -120); beep(380, 0.12, 'triangle', 0.04, -100, 0.1); beep(300, 0.16, 'triangle', 0.04, -80, 0.22); },
     bossShot: () => beep(330, 0.1, 'triangle', 0.035, -150),
     iceTink: () => { beep(2400, 0.05, 'sine', 0.035); beep(3200, 0.04, 'sine', 0.02, 0, 0.02); },
-    shieldBreak: () => { beep(1800, 0.25, 'square', 0.05, -1500); beep(300, 0.3, 'sawtooth', 0.05, -200, 0.03); },
+    shieldBreak: () => { noiseHit(0.35, 0.14, 5000, 0.9, 0, 'highpass'); beep(2400, 0.25, 'triangle', 0.05, -1600); beep(90, 0.25, 'sine', 0.14, -30); [1568, 2093, 2637].forEach((f, i) => beep(f, 0.3, 'sine', 0.025, 0, 0.05 + i * 0.04)); },
     shadowIn: () => beep(420, 0.5, 'sine', 0.05, -300),
     stone: () => { beep(160, 0.3, 'square', 0.05, -60); beep(90, 0.35, 'triangle', 0.06, -30, 0.05); },
     rage: () => { beep(220, 0.2, 'sawtooth', 0.06, 200); beep(330, 0.25, 'sawtooth', 0.05, 300, 0.1); },
@@ -495,7 +525,7 @@
     tele: () => { beep(1046, 0.07, 'square', 0.045); beep(1318, 0.07, 'square', 0.045, 0, 0.14); },
     warn: () => { beep(880, 0.12, 'square', 0.04); beep(660, 0.12, 'square', 0.04, 0, 0.16); },
     beam: () => beep(120, 0.45, 'sawtooth', 0.06, 60),
-    bossDown: () => [392, 330, 262, 196].forEach((f, i) => beep(f, 0.22, 'square', 0.06, -40, i * 0.12)),
+    bossDown: () => { noiseHit(0.8, 0.2, 400, 0.6, 0, 'lowpass', -300); beep(60, 0.7, 'sine', 0.2, -25); [392, 330, 262, 196].forEach((f, i) => beep(f, 0.24, 'square', 0.05, -40, i * 0.1)); },
     shield: () => { beep(1200, 0.15, 'sine', 0.06, -600); beep(300, 0.2, 'triangle', 0.06, 200, 0.05); },
     shieldUp: () => { beep(800, 0.08, 'sine', 0.04); beep(1200, 0.12, 'sine', 0.04, 0, 0.07); },
     kill: () => { beep(660, 0.1, 'square', 0.05); beep(880, 0.1, 'square', 0.05, 0, 0.09); beep(1320, 0.18, 'square', 0.05, 0, 0.18); },
@@ -560,6 +590,7 @@
   }
   // score = ortak ilerleme (zorluk için); her oyuncunun kendi puanı players[i].score
   // Hikaye modu durumu
+  let hitStopT = 0, slowT = 0, slowK = 1, zoomT = 0, zoomX = 0, zoomY = 0, hurtEdgeT = 0, defeatT = 0, defeatName = '', muzzles = [], rings = [];
   let incomingT = 0, heartPending = false, lostHeartT = 0, lives = 5, boss = null, bossPhase = null, bossCount = 0, nextBossAt = 25, ebullets = [], banners = [], phaseT = 0, bossTint = 0;
   const BOSS_EVERY = 25, MAX_LIVES = 5, SAVE_EVERY = 50;
   // Hikaye kaydı: her 50 puanda bir otomatik kaydedilir, tarayıcı kapansa da kalır
@@ -894,6 +925,7 @@
     // mermi hasarı: silahın mermi başı hasarı; Yasmin'de mermi sayısı ikiye katlanınca yarısı (lazerde katlanmadığı için tam)
     const dmg = (w.dmg || 1) * (dbl && !w.burst ? 0.5 : 1);
     for (let k = 0; k < bursts; k++) pattern.forEach(([a, dy]) => { const m = make(a, dy, k * 0.07); m.dmg = dmg; shots.push(m); });
+    muzzles.push({ x: b.x + 20, y: b.y + 2, t: 0, c: WCOL[w.id] || '#ffffff' });
     sfx[w.id]();
   }
 
@@ -1042,12 +1074,15 @@
       if (b.y + b.r >= H - GROUND_H - 2) b.vy = FLAP_V;
       b.lastHitBy = -1;
       burst(b.x, b.y, ['#ff5fb4', '#ffc6e4', '#ffffff', '#49c6ff'], 24, 200);
+      popRing(b.x, b.y, '#ffc6e4', 10, 50, 0.4); shake(3, 0.15);
       sfx.shield();
       return;
     }
     b.alive = false;
-    b.vx = 0;
-    sfx.hit(); sfx.die();
+    b.vx = 0; b.vy = -190;   // geri savrulur
+    slowT = 0.32; slowK = 0.35; hurtEdgeT = 0.7; shake(5, 0.25);
+    burst(b.x, b.y, ['#ff3b6b', '#ffffff', QUEENS[b.sel.queen].body], 26, 220);
+    sfx.hurt(); sfx.die();
     if (mode === 3 && boss && boss.phase === 'fight') mechEvent(boss, 'playerHit', b);
     if (mode === 3) {
       lives--;
@@ -1217,8 +1252,12 @@
   function killBossCheck() {
     if (boss.hp <= 0 && boss.phase !== 'dying') {
       boss.phase = 'dying'; boss.t = 0; boss.beam = null; boss.tele = null; boss.ultAct = null; boss.ultPrep = 0; uhz = [];
-      ebullets = [];
-      flash = 0.8; sfx.bossDown();
+      ebullets = []; boss.mobs = [];
+      flash = 0.8; sfx.bossDown(); setTimeout(() => sfx.victory(), 420);
+      slowT = 0.5; slowK = 0.3; zoomT = 0.9; zoomX = boss.x; zoomY = boss.y; hitStopT = 0.06; shake(7, 0.4);
+      defeatT = 2.4; defeatName = boss.name.toUpperCase();
+      popRing(boss.x, boss.y, '#ffffff', 20, 260, 0.7); popRing(boss.x, boss.y, boss.def.glow, 10, 180, 0.55);
+      burst(boss.x, boss.y, ['#ff5fb4', '#ffe23b', '#49c6ff', '#2ee68a', '#b07aff', '#ffffff'], 90, 380);
     }
   }
 
@@ -1228,11 +1267,15 @@
     dmg = mechDmg(boss, dmg, s);
     if (dmg <= 0) { burst(s.x, s.y, ['#ffffff', '#9aa4c4'], 3, 60); return; }   // kalkan/zırh/gölge: hasar yok
     boss.hp -= dmg;
-    boss.hurt = 1;
+    boss.hurt = 1; boss.kx = Math.min(10, (boss.kx || 0) + 3 + dmg * 2);   // küçük geri sekme
+    const wc = WCOL[s.w] || '#ffffff';
+    floaters.push({ x: s.x + (Math.random() - 0.5) * 10, y: s.y - 12, t: 0.25, c: wc, txt: dmg >= 1 ? String(Math.round(dmg * 10) / 10) : dmg.toFixed(1).replace(/^0/, ''), small: true });
+    popRing(s.x, s.y, wc, 4, 18, 0.22);
+    if (dmg >= 1.5) { impact(2); burst(s.x, s.y, [wc, '#ffffff', '#ffe23b'], 22, 220); }
     if (shooter) shooter.ult = Math.min(100, shooter.ult + 1.5 * Math.min(1, dmg));   // ulti dolumu hasarla orantılı (3'lü atış ultiyi 3 kat doldurmasın)
     // Volkan – Yakıcı Ateş: boss 3 sn yanar (meteor: 5 sn)
     if (shooter && qid(shooter) === 'volkan') boss.burn = Math.max(boss.burn || 0, s.w === 'meteor' ? 5 : 3);
-    burst(s.x, s.y, [boss.def.glow, '#ffffff'], 5, 90);
+    burst(s.x, s.y, [wc, boss.def.glow, '#ffffff'], 7, 110);
     sfx.bossHit();
     killBossCheck();
   }
@@ -1396,7 +1439,8 @@
   const MECH_COL = { shadow: '#b07aff', ice: '#9fe8ff', regen: '#7dff6a', rage: '#ff3b6b', stone: '#b8b8c4', drone: '#00f0ff', drain: '#ff3b5c',
     tomb: '#ffd84a', plates: '#e8f4ff', bubble: '#7fe0ff', candy: '#ff8ccc', clones: '#ffe23b', repair: '#ffb84a', minions: '#c8ff6a',
     planets: '#c8a8ff', charge: '#fff6a0', mirror: '#ffffff' };
-  function impact(lv) { shake(lv * 2, 0.12 + lv * 0.04); }   // güçlü vuruş hissi (7. adımda hit stop + parçacıkla zenginleşir)
+  // güçlü vuruş: 40-60 ms "hit stop" + kısa sarsıntı + ses (parçacığı çağıran ekler)
+  function impact(lv) { hitStopT = Math.max(hitStopT, 0.03 + 0.01 * Math.min(3, lv)); shake(lv * 2, 0.12 + lv * 0.04); if (lv >= 2) sfx.bigHit(); }
   const mechK = (B) => 1 + 0.15 * bossEnc(B);   // ★ döngüsünde mekanikler biraz güçlenir
   const P2_POOL = ['ice', 'stone', 'regen', 'charge', 'drone', 'planets'];
   function mechInit(B) {
@@ -2139,6 +2183,9 @@
     if (state === 'ready' && mode === 3 && !panelOpen) updateParty(dt); else if (state !== 'ready') partyOn = false;
     flash = Math.max(0, flash - dt * 3);
     shakeT = Math.max(0, shakeT - dt);
+    for (const m of muzzles) m.t += dt; muzzles = muzzles.filter(m => m.t < 0.08);
+    for (const r of rings) r.t += dt; rings = rings.filter(r => r.t < r.d);
+    if (boss) boss.kx = (boss.kx || 0) * Math.exp(-dt * 14);
     for (const b of players) b.wing = Math.max(0, b.wing - dt * 2.5);
 
     const scrolling = state !== 'dead';
@@ -2205,14 +2252,14 @@
               lives = Math.min(MAX_LIVES, lives + 1);
               hudNote('+1 ❤', '#ff3b6b');
               burst(hx, hy, ['#ff3b6b', '#ff8fa3', '#ffffff'], 18, 150, 'heart');
-              sfx.shieldUp();
+              popRing(hx, hy, '#ff3b6b', 8, 46, 0.4); sfx.pop(); sfx.shieldUp();
               break;
             }
           }
         }
         for (const b of players) {
           if (!b.alive) continue;
-          if (!p.passedBy.includes(b.i) && p.x + PIPE_W < b.x) { p.passedBy.push(b.i); addScore(b, 1); sfx.score(); b.ult = Math.min(100, b.ult + 6); }
+          if (!p.passedBy.includes(b.i) && p.x + PIPE_W < b.x) { p.passedBy.push(b.i); addScore(b, 1); sfx.score(); b.ult = Math.min(100, b.ult + 6); popRing(p.x + PIPE_W, p.top + p.gap / 2, '#ffe23b', 6, 34, 0.3); }
           const r = b.r - 2;
           if (ultOn(b, 'lila')) continue;   // Tüy Fırtınası: sütunların içinden geçer
           if (circleRect(b.x, b.y, r, p.x, -100, PIPE_W, p.top + 100) ||
@@ -3537,7 +3584,7 @@
     g.save();
     g.globalAlpha *= Math.min(1, enterA);
     if (A) {   // resimli: yavaş süzülme, harekete göre eğilme (+ çok hafif sallanma)
-      g.translate(B.x, B.y + Math.sin(time * 2.3 + ph) * 4);
+      g.translate(B.x + (B.kx || 0), B.y + Math.sin(time * 2.3 + ph) * 4);
       g.rotate((B.tilt || 0) + Math.sin(time * 1.7 + ph) * 0.03 + (B.phase === 'dying' ? B.t * 2 : 0));
     } else {
       g.translate(B.x, B.y + Math.sin(time * 4) * 3);
@@ -4804,7 +4851,12 @@
       y += 30;
     }
     drawNotes(y);
-    if (mode === 3 && boss && boss.taunt) drawTalkDots(boss);   // konuşan boss'un yanında küçük "…" balonu
+    if (mode === 3 && boss && boss.taunt) drawTalkDots(boss);
+    if (defeatT > 0) {   // büyük "DEFEATED" yazısı
+      const u = 2.4 - defeatT, a = Math.min(1, u / 0.15, defeatT / 0.4), sc = 1 + 0.35 * Math.max(0, 1 - u / 0.25);
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, 118); ctx.scale(sc, sc);
+      text('DEFEATED', 0, 0, 34, '#ffe23b'); text(defeatName, 0, 34, 9, '#ffffff'); ctx.restore();
+    }   // konuşan boss'un yanında küçük "…" balonu
   }
 
   // Duyurular, kısa notlar ve boss repliği: tek şerit, üst üste binmeden
@@ -4836,6 +4888,15 @@
     }
     ctx.globalAlpha = 1;
   }
+
+  // namlu parlaması ve "pop" halkaları
+  function drawHitFx() {
+    const g = ctx;
+    for (const m of muzzles) { const k = 1 - m.t / 0.08; if (k <= 0) continue; const rg = g.createRadialGradient(m.x, m.y, 0, m.x, m.y, 16 * k + 6); rg.addColorStop(0, `rgba(255,255,255,${FL(0.9) * k})`); rg.addColorStop(0.4, hexA(m.c, 0.6 * k)); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; circ(g, m.x, m.y, 22); g.fill(); }
+    for (const r of rings) { const k = r.t / r.d; if (k >= 1) continue; g.save(); g.globalAlpha = 1 - k; g.strokeStyle = r.c; g.lineWidth = 3 * (1 - k) + 1; g.shadowColor = r.c; g.shadowBlur = 8; circ(g, r.x, r.y, r.r0 + (r.r1 - r.r0) * (1 - (1 - k) * (1 - k))); g.stroke(); g.restore(); }
+  }
+  function popRing(x, y, c, r0 = 6, r1 = 30, d = 0.35) { rings.push({ x, y, c, r0, r1, d, t: 0 }); }
+  const WCOL = { rainbow: '#ff9ad5', kiss: '#ff3b6b', stars: '#ffe23b', disco: '#c8d8ff', laser: '#ff8af0', meteor: '#ff7a33' };
 
   function drawTalkDots(B) {
     const a = Math.max(0, Math.min(1, B.taunt.t / 0.2, (2.6 - B.taunt.t) / 0.3));
@@ -4910,6 +4971,7 @@
     ctx.save();
     { const s = (OPT.shake ? OPT.shakeK : 0) * Math.max(flash > 0.5 ? 4 : 0, shakeT > 0 ? shakeA * shakeT / shakeD : 0);   // ekran sarsıntısı
       if (s > 0.05) ctx.translate((Math.random() - 0.5) * 2 * s, (Math.random() - 0.5) * 2 * s); }
+    if (zoomT > 0) { const k = 1 + 0.07 * Math.sin(Math.min(1, zoomT / 0.9) * Math.PI); ctx.translate(zoomX, zoomY); ctx.scale(k, k); ctx.translate(-zoomX, -zoomY); }   // boss ölünce hafif yakınlaşma
     const themed = mode === 3 && state !== 'title' && state !== 'menu';
     if (themed) safe(ctx, 'tema', drawStoryBG);
     else { safe(ctx, 'gökyüzü', drawSky); safe(ctx, 'havai fişek', drawFireworks); safe(ctx, 'şehir', drawCity); }
@@ -4932,7 +4994,12 @@
     if (state !== 'title' && state !== 'menu') safe(ctx, 'vinyet', () => {   // kenarları karartan sinematik vinyet
       const vg = ctx.createRadialGradient(W / 2, H * 0.45, H * 0.3, W / 2, H * 0.45, H * 0.75);
       vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.38)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      if (hurtEdgeT > 0) {   // oyuncu hasar aldı: ekran kenarında kırmızı titreşim
+        const a = FL(0.55) * (hurtEdgeT / 0.7) * (0.75 + 0.25 * Math.sin(time * 40));
+        const rg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95); rg.addColorStop(0, 'rgba(255,0,40,0)'); rg.addColorStop(1, `rgba(255,20,50,${a})`); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+      }
     });
+    safe(ctx, 'vuruş', drawHitFx);
     safe(ctx, 'ulti', () => {
       if (timeStopT > 0) {   // Zaman Durdur
         const a = Math.min(1, timeStopT, 4 - timeStopT + 0.001);
@@ -4950,7 +5017,7 @@
       }
     });
     safe(ctx, 'yazı', () => {
-      for (const f of floaters) { ctx.globalAlpha = 1 - f.t / 0.9; htext(f.txt || '+1', f.x, f.y, f.txt ? 10 : 8, f.c || '#ffe23b'); }   // sadece küçük +1/+5 sayıları
+      for (const f of floaters) { ctx.globalAlpha = Math.max(0, 1 - f.t / 0.9); htext(f.txt || '+1', f.x, f.y, f.small ? 6 : f.txt ? 10 : 8, f.c || '#ffe23b'); }   // sadece küçük +1/+5 sayıları
     });
     while ((ctx.__d || 0) > d0) ctx.restore();
     ctx.globalAlpha = 1;
@@ -5475,7 +5542,11 @@
     const steps = DBG && DBG.steps > 1 ? DBG.steps : 1;   // test: simülasyonu hızlandır
     for (let k = 0; k < steps; k++) {
       if (DBG && DBG.onTick && !paused) { try { DBG.onTick(dt); } catch (err) { DBG.err = String(err); } }
-      if (!paused) safe(ctx, 'güncelleme', () => update(dt));
+      if (!paused) {   // hit stop: oyun anlık durur; yavaş çekim: zaman yavaşlar (gerçek zamanla biter)
+        if (hitStopT > 0) hitStopT -= dt;
+        else safe(ctx, 'güncelleme', () => update(dt * (slowT > 0 ? slowK : 1)));
+        slowT = Math.max(0, slowT - dt); zoomT = Math.max(0, zoomT - dt); hurtEdgeT = Math.max(0, hurtEdgeT - dt); defeatT = Math.max(0, defeatT - dt);
+      }
     }
     if (!(DBG && DBG.noRender)) render();
     if (panelOpen) renderPreviews();
@@ -5503,7 +5574,7 @@
     get p() { return players; }, get boss() { return boss; }, get eb() { return ebullets; }, get pipes() { return pipes; },
     get enemies() { return enemies; }, get banners() { return banners; },
     flap: (i = 0) => flap(i), shoot: (i = 0) => shoot(i), ult: (i = 0) => useUlt(i),
-    setFlash: (f) => { flash = f; stormFlash = f; }, opt: OPT,
+    setFlash: (f) => { flash = f; stormFlash = f; }, opt: OPT, hurtMe: () => killPlayer(players[0]),
     art: () => boss ? { c: bossCircs(boss), m: bossMouth(boss), h: bossHeadTop(boss) } : null,
     danger: (x, y, r, dt) => (typeof predictDanger === 'function' ? predictDanger(x, y, r, dt) : 0),
     // hikayeyi L. boss'un hemen öncesinden başlat (q: hikaye kuşu indeksi)
