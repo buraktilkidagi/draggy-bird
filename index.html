@@ -912,10 +912,10 @@
     });
   }
   function drawArenaPortrait(cv, def) {
-    const g = cv.getContext('2d'), A = BOSS_ART[def.id], SP = GFX.boss[def.id];
+    const g = cv.getContext('2d'), A = artOf(def.id), SP = GFX.boss[def.id];
     const bg = g.createLinearGradient(0, 0, 0, 130); bg.addColorStop(0, '#2a1450'); bg.addColorStop(1, '#0b0b1e'); g.fillStyle = bg; g.fillRect(0, 0, 200, 130);
     const rg = g.createRadialGradient(100, 70, 10, 100, 70, 90); rg.addColorStop(0, hexA(def.glow, 0.35)); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; g.fillRect(0, 0, 200, 130);
-    if (A && sprReady(SP)) { const D = 190, k = D / 512; g.drawImage(SP, 100 - A[6] * k + 10, 70 - A[7] * k + 6, D, D); }
+    if (A && sprReady(SP)) { const D = 146; g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(SP, 100 - D / 2, 66 - D / 2, D, D); }   // kartın ortasında, kesilmeden
     else if (A && GFX.img && SP && !SP.ok) SP.addEventListener('load', () => drawArenaPortrait(cv, def), { once: true });
     else { const fake = { def, x: 100, y: 66, t: 9, phase: 'fight', hurt: 0, mouth: 0, blink: 0, intro: true, L: BOSSES.indexOf(def) }; g.save(); drawBoss(fake, 0.9, g); g.restore(); }
   }
@@ -1118,8 +1118,42 @@
     ayna: ['boss_20_mirror_queen', 52, 200, 102, 154, 45, 192, 304, 112, 473],
   };
   const ART_D = 125;   // drawBoss ölçeği 1'de görselin kenarı; dövüşte BOSS_SC (1,2) ile 150 px → oyuncu kuşunun ~2 katı
-  for (const b of BOSSES) { const A = BOSS_ART[b.id]; if (A) GFX.boss[b.id] = loadSprite(`assets/bosses/${A[0]}.webp`); }
-  function bossArt(B) { const A = BOSS_ART[B.def.id]; return A && sprReady(GFX.boss[B.def.id]) ? A : null; }
+  // YENİ chibi boss görselleri (assets/bosses_chibi): oyuncu kuşlarıyla aynı tarzda, iri kafalı, sola bakan; kare, şeffaf,
+  // büyütülmeden ~%7 saydam kenar paylı. Ölçüler aynı 512 uzayında (görsel ekranda ART_D kenarlı kareye çizilir):
+  // [dosya, gaga ucu x, y, kafa x, y, r, gövde x, y, r, sağ uç x, (Ayna: sırttaki ayna x, y)]
+  const BOSS_ART_CHIBI = {
+    kuzgun: ["boss_01_raven", 44, 296, 182, 266, 104, 280, 323, 115, 465],
+    madam: ["boss_02_madame_grey", 43, 293, 182, 267, 105, 280, 316, 115, 466],
+    paparazza: ["boss_03_paparazza_flash", 54, 322, 189, 241, 80, 277, 346, 107, 466],
+    golge: ["boss_04_shadow_queen", 42, 275, 182, 250, 107, 281, 311, 115, 467],
+    kristal: ["boss_05_crystal_ice", 104, 288, 172, 248, 97, 214, 363, 120, 465],
+    sarmasik: ["boss_06_venom_vine", 43, 286, 182, 258, 106, 279, 320, 114, 466],
+    disko: ["boss_07_disco_dictator", 44, 262, 184, 235, 105, 280, 316, 114, 467],
+    medusa: ["boss_08_crimson_medusa", 43, 252, 183, 224, 105, 280, 317, 114, 467],
+    siber: ["boss_09_neon_cyber", 41, 315, 181, 290, 107, 279, 315, 114, 466],
+    vampir: ["boss_10_vampire_countess", 55, 265, 144, 238, 80, 220, 340, 107, 466],
+    firavun: ["boss_11_golden_pharaoh", 43, 326, 183, 300, 105, 280, 314, 114, 466],
+    elmas: ["boss_12_black_diamond", 43, 278, 182, 251, 105, 279, 315, 114, 466],
+    siren: ["boss_13_ocean_siren", 42, 271, 182, 247, 107, 281, 310, 115, 467],
+    bonbon: ["boss_14_bonbon", 92, 268, 195, 237, 90, 258, 344, 121, 465],
+    sirk: ["boss_15_circus_queen", 44, 283, 212, 232, 76, 258, 338, 119, 468],
+    mekanika: ["boss_16_mechanika", 43, 260, 182, 235, 107, 280, 312, 114, 466],
+    mantar: ["boss_17_mushroom_witch", 108, 252, 211, 217, 82, 245, 337, 112, 466],
+    kozmik: ["boss_18_cosmic_empress", 40, 262, 181, 237, 106, 279, 311, 115, 466],
+    firtina: ["boss_19_storm_queen", 43, 265, 182, 239, 105, 279, 315, 114, 466],
+    ayna: ["boss_20_mirror_queen", 43, 261, 182, 235, 106, 280, 314, 114, 466, 330, 173],
+  };
+  // önce chibi görseli; yüklenemezse eski görsel (assets/bosses) ve onun ölçüleri. im.A = kullanılan ölçü tablosu
+  function loadBossSprite(id) {
+    const C = BOSS_ART_CHIBI[id], O = BOSS_ART[id], im = new Image();
+    im.onload = () => { im.ok = true; };
+    im.onerror = () => { if (O && im.A !== O) { im.A = O; im.src = `assets/bosses/${O[0]}.webp`; } };
+    im.A = C || O; im.src = C ? `assets/bosses_chibi/${C[0]}.webp` : `assets/bosses/${O[0]}.webp`;
+    return im;
+  }
+  for (const b of BOSSES) if (BOSS_ART_CHIBI[b.id] || BOSS_ART[b.id]) GFX.boss[b.id] = loadBossSprite(b.id);
+  const artOf = (id) => { const im = GFX.boss[id]; return im ? im.A : null; };
+  function bossArt(B) { const im = GFX.boss[B.def.id]; return im && sprReady(im) ? im.A : null; }
   // hasar parlaması için görselin düz renge boyanmış kopyası (ilk kullanımda bir kez hazırlanır)
   function tinted(im, col) {
     const key = 'tint' + col; if (im[key]) return im[key];
@@ -4135,6 +4169,7 @@
     if (A) {   // resimli boss: nefes alır gibi ölçek + vurulunca kırmızı/beyaz parlama
       const br = Math.sin(time * 2.6 + ph), k = ART_D / 512, x0 = -A[6] * k, y0 = -A[7] * k;
       g.scale(1 - br * 0.012, 1 + br * 0.024);
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';   // yumuşak ölçekleme
       g.drawImage(SP, x0, y0, ART_D, ART_D);
       const st = B.mx && B.mx.stone && MECHS.stone.grey(B, B.mx.stone);   // Medusa: taş deri
       if (st) { const a0 = g.globalAlpha; g.globalAlpha = a0 * st; g.drawImage(tinted(SP, '#9a9aa6'), x0, y0, ART_D, ART_D); g.globalAlpha = a0; }
@@ -4145,7 +4180,7 @@
         g.globalAlpha = a0;
       }
       if (B.p2) {   // Ayna Kraliçe 2. faz: sırtındaki ayna çatlar
-        const mx = (282 - A[6]) * k, my = (166 - A[7]) * k;
+        const mx = ((A[10] || 282) - A[6]) * k, my = ((A[11] || 166) - A[7]) * k;
         g.beginPath(); for (const [a, L] of [[-2.2, 13], [-0.9, 15], [0.3, 12], [1.4, 16], [2.6, 11]]) { g.moveTo(mx, my); g.lineTo(mx + Math.cos(a) * L * 0.55 + 2, my + Math.sin(a) * L * 0.55); g.lineTo(mx + Math.cos(a) * L, my + Math.sin(a) * L); }
         g.strokeStyle = 'rgba(20,8,40,.85)'; g.lineWidth = 2.6; g.stroke(); g.strokeStyle = '#ffffff'; g.lineWidth = 1.1; g.stroke();
       }
@@ -4927,7 +4962,7 @@
 
   // Boss tanıtımı: uyarı süresince sağda kayarak gelen portre kartı (resimli modda)
   function drawIncomingCard() {
-    const def = BOSSES[bossCount % BOSSES.length], SP = GFX.boss[def.id], A = BOSS_ART[def.id];
+    const def = BOSSES[bossCount % BOSSES.length], SP = GFX.boss[def.id], A = artOf(def.id);
     if (!A || !sprReady(SP)) return;
     const t = incomingT, a = Math.max(0, Math.min(1, t / 0.35, (3.2 - t) / 0.5)); if (a <= 0) return;
     const g = ctx, R = 50, e = Math.min(1, t / 0.45), x = W - 70 + (1 - e) * (1 - e) * 120, y = 190 + Math.sin(time * 2) * 3;
