@@ -350,8 +350,11 @@
 </div>
 <script>
 (() => {
-  const W = 1138, H = 640, GROUND_H = 90;   // yatay 16:9 (yükseklik eskisi gibi 640: dikey oynanış değişmez)
-  const BX = Math.round(W * 0.2);            // kuşun x konumu: ekranın ~%20'si
+  // yatay: mantıksal yükseklik hep 640 (dikey oynanış değişmez). Genişlik 16:9'da 1138; daha geniş ekranlarda (21:9 vb.)
+  // ekranı dolduracak kadar uzar (en fazla 1520), daha dar ekranlarda (16:10, 4:3) 1138 kalır ve tuval tüm genişliği kaplar.
+  const BASE_W = 1138, MAX_W = 1520, H = 640, GROUND_H = 90;
+  let W = BASE_W;
+  const BX = Math.round(BASE_W * 0.2);            // kuşun x konumu: ekranın ~%20'si
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   const wrap = document.getElementById('wrap');
@@ -499,7 +502,10 @@
 
   // ================= BOYUTLANDIRMA =================
   function resize() {
-    const scale = Math.min(window.innerWidth / W, window.innerHeight / H) * 0.98;   // 16:9; farklı oranlı ekranlarda ince kenar boşluğu
+    const iw = window.innerWidth, ih = window.innerHeight;
+    W = Math.max(BASE_W, Math.min(MAX_W, Math.round(H * iw / ih)));   // geniş ekranda mantıksal genişlik uzar
+    FXK = W / 360; if (PARTY_SPOTS) PARTY_SPOTS.forEach((s, i) => { s[0] = W / 2 + [-270, -90, 90, 270][i]; });
+    const scale = Math.min(iw / W, ih / H);   // tüm genişliği doldurur (16:9'dan dar ekranda yalnızca üst/alt boşluk kalır)
     const dpr = DPR();
     canvas.style.width = (W * scale) + 'px';
     canvas.style.height = (H * scale) + 'px';
@@ -1173,8 +1179,13 @@
     // hikaye modu
     lives = MAX_LIVES; boss = null; bossPhase = null; bossCount = 0; nextBossAt = BOSS_EVERY;
     ebullets = []; banners = []; uhz = []; phaseT = 0; nextSaveAt = SAVE_EVERY; heartPending = false;
-    // ilk sütun ~5,6 sn uzakta başlar (yatay ekranda W'nin dışından başlasa 9 sn beklenirdi)
-    for (let i = 0; i < 4; i++) addPipe(BX + 560 + i * PIPE_SPACING);
+    // bölüm başında ekran boş başlamaz: ilk sütun ekranın ortasında, gerisi sağ kenarın dışına kadar dizili
+    fillPipes(Math.round(W / 2));
+  }
+  // sütun dizisini sağ kenarın dışına kadar tamamlar: yeni sütun her zaman ekranın dışında (x ≥ W + 40) doğar
+  function fillPipes(x0) {
+    if (!pipes.length) addPipe(x0 != null ? x0 : W + 60);
+    while (pipes[pipes.length - 1].x < W + 40) addPipe(pipes[pipes.length - 1].x + PIPE_SPACING);
   }
 
   function currentGap() { return Math.max(140, BASE_GAP - score * 1.2); }
@@ -1634,7 +1645,7 @@
   function bossXTarget(B) {
     const hi = bossHomeX(B);
     if (B.ultPrep || B.ultAct) return hi;
-    const lo = Math.max(BX + 372, B.cyc === 'C' ? 600 : 700);
+    const lo = Math.max(BX + 372, W - BASE_W + (B.cyc === 'C' ? 600 : 700));   // geniş ekranda sağ kenara göre
     const u = 0.5 + 0.5 * Math.sin(B.mt * 0.37 + 1.3) * Math.cos(B.mt * 0.11 + B.L);
     return lo + (hi - lo) * u;
   }
@@ -2007,7 +2018,7 @@
     minions: {
       init(B, s) { MECHS.minions.cycle(B, s); },
       cycle(B, s) { const have = B.mobs.filter(m => m.kind === 'shroom' && m.alive).length; const gy = H - GROUND_H;
-        for (let k = have; k < 2; k++) addMob(B, { kind: 'shroom', hp: Math.round(2 * mechK(B)), r: 15, x: 600 + k * 150 + Math.random() * 40, y: gy - 50 - k * 25, grow: 0 }); sfx.bubble(); },
+        for (let k = have; k < 2; k++) addMob(B, { kind: 'shroom', hp: Math.round(2 * mechK(B)), r: 15, x: W - 538 + k * 150 + Math.random() * 40, y: gy - 50 - k * 25, grow: 0 }); sfx.bubble(); },
       update(B, s, dt) { const n = B.mobs.filter(m => m.kind === 'shroom' && m.alive); for (const m of n) { m.grow = Math.min(1, m.grow + dt * 2); m.max = m.max || m.hp; } if (n.length) bossHeal(B, 0.0015 * n.length * mechK(B) * dt); },
       killed(B, s, m) { burst(m.x, m.y, ['#c8ff6a', '#ff3b6b', '#ffffff'], 18, 150); sfx.pop(); },
       status: (B, s) => { const n = B.mobs.filter(m => m.kind === 'shroom' && m.alive).length; return n ? [T('mech_minions') + ' ' + n, null] : null; },
@@ -2420,7 +2431,7 @@
       phaseT -= dt;
       if (phaseT <= 0) {
         bossPhase = null;
-        if (!arena) for (let i = 0; i < 3; i++) addPipe(W + 60 + i * PIPE_SPACING);
+        if (!arena) { addPipe(W + 60); fillPipes(); }
         if (heartPending && pipes[1]) {   // 2. sütunun boşluğuna bir can koy (orada düşman olmasın)
           const hp = pipes[1];
           hp.heart = { taken: false };
@@ -2686,10 +2697,8 @@
               circleRect(b.x, b.y, r, p.x, p.top + p.gap, PIPE_W, H)) killPlayer(b);
         }
       }
-      if (pipes.length && pipes[0].x < -PIPE_W - 10) {
-        pipes.shift();
-        if (!bossPhase && !arena) addPipe(pipes[pipes.length - 1].x + PIPE_SPACING);   // boss sırasında yeni sütun yok
-      }
+      if (pipes.length && pipes[0].x < -PIPE_W - 10) pipes.shift();
+      if (!bossPhase && !arena && pipes.length) fillPipes();   // boss sırasında yeni sütun yok
       if (mode === 3) { updateStory(dt); updateTutorial(dt); }
       statTick(dt);
 
@@ -3323,7 +3332,7 @@
   }
   // sabit "rastgele" sayılar (her karede aynı)
   const HILL_WRAP = 204840;   // = 360 × 569 = 180 × W
-  const FXK = W / 360;        // hava efektlerinde öğe sayısı çarpanı (genişlik 360'tan 1138'e çıktı)
+  var FXK = W / 360;        // hava efektlerinde öğe sayısı çarpanı (genişlik 360'tan 1138'e çıktı)
   let tileK = 0;              // döşeme kopyası numarası: her kopya biraz farklı çizilsin (tekrar göze batmasın)
   const hv = (n) => hash(n + tileK * 31.7);
   const hash = (n) => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
@@ -5206,7 +5215,7 @@
   // 5) kararlılıkla kanat çırpar: "Tacımı geri alacağım!" → başlamak için dokun
   const PARTY_END = 17.5, P_ENTER = 3.4, P_MOCK = 7.0, P_KICK = 12.2, P_OUT = 13.6, P_RISE = 15.3;
   let partyT = 99, partyOn = false, partyBeat = 0;
-  const PARTY_SPOTS = [[W / 2 - 270, 300], [W / 2 - 90, 288], [W / 2 + 90, 288], [W / 2 + 270, 300]];
+  var PARTY_SPOTS = [[W / 2 - 270, 300], [W / 2 - 90, 288], [W / 2 + 90, 288], [W / 2 + 270, 300]];
   const P_DOOR = 210, P_STAND = 420;   // kapının ve kuşun durduğu yerin x'i
   function updateParty(dt) {
     if (!partyOn) { partyOn = true; partyT = storySave ? PARTY_END : 0; partyBeat = 0; }
